@@ -35,11 +35,33 @@ jobs:
           fi
 
       - name: 构建 APK（固定签名 + 递增版本号）
+        id: gradle_build
+        continue-on-error: true
         env:
           BUILD_NUMBER: ${{ github.run_number }}
         run: |
           echo "versionCode = $BUILD_NUMBER"
-          $GRADLE_CMD assembleDebug --stacktrace
+          # 日志同时输出到终端和文件，PIPESTATUS 拿真实退出码
+          $GRADLE_CMD assembleDebug --stacktrace 2>&1 | tee build.log
+          echo "BUILD_EXIT=${PIPESTATUS[0]}" >> $GITHUB_ENV
+
+      - name: 保存构建日志（便于外部排查）
+        if: always()
+        run: |
+          mkdir -p logs
+          [ -f build.log ] || echo "(no build.log)" > build.log
+          tail -c 300000 build.log > logs/build.log
+          git config user.name  "qingfeng-bot"
+          git config user.email "bot@qingfeng.local"
+          git add -f logs
+          git diff --cached --quiet && echo "日志无变化" || git commit -m "logs: run ${GITHUB_RUN_NUMBER}"
+          git push origin HEAD:main || echo "push 日志失败，忽略"
+
+      - name: 构建失败判定
+        if: env.BUILD_EXIT != '0'
+        run: |
+          echo "构建失败，退出码 $BUILD_EXIT"
+          exit 1
 
       - name: 提交 APK 回仓库
         run: |
