@@ -35,10 +35,10 @@ to this project's gradle.properties.
 > Task :app:mapDebugSourceSetPaths
 > Task :app:generateDebugResources
 > Task :app:packageDebugResources
+> Task :app:mergeDebugResources
 > Task :app:createDebugCompatibleScreenManifests
 > Task :app:extractDeepLinksDebug
 > Task :app:parseDebugLocalResources
-> Task :app:mergeDebugResources
 > Task :app:processDebugMainManifest
 > Task :app:processDebugManifest
 > Task :app:javaPreCompileDebug
@@ -47,36 +47,36 @@ to this project's gradle.properties.
 > Task :app:generateDebugAssets UP-TO-DATE
 > Task :app:mergeDebugAssets
 > Task :app:compressDebugAssets
-> Task :app:desugarDebugFileDependencies
-> Task :app:mergeDebugStartupProfile
-> Task :app:mergeDebugJniLibFolders
-> Task :app:checkDebugDuplicateClasses
-> Task :app:mergeDebugNativeLibs NO-SOURCE
-> Task :app:stripDebugDebugSymbols NO-SOURCE
 > Task :app:processDebugManifestForPackage
-> Task :app:mergeLibDexDebug
-> Task :app:validateSigningDebug
-> Task :app:writeDebugAppMetadata
-> Task :app:writeDebugSigningConfigVersions
+> Task :app:desugarDebugFileDependencies
 > Task :app:processDebugResources
-> Task :app:mergeExtDexDebug
+> Task :app:checkDebugDuplicateClasses
+> Task :app:mergeDebugStartupProfile
 
 > Task :app:compileDebugKotlin
-w: file:///home/runner/work/qingfeng-files/qingfeng-files/app/src/main/java/com/qingfeng/files/ui/browse/BrowseActivity.kt:222:18 This declaration overrides a deprecated member but is not marked as deprecated itself. Please add the '@Deprecated' annotation or suppress the diagnostic.
-w: file:///home/runner/work/qingfeng-files/qingfeng-files/app/src/main/java/com/qingfeng/files/ui/browse/BrowseActivity.kt:225:38 'fun onBackPressed(): Unit' is deprecated. This method has been deprecated in favor of using the
+w: file:///home/runner/work/qingfeng-files/qingfeng-files/app/src/main/java/com/qingfeng/files/ui/browse/BrowseActivity.kt:302:18 This declaration overrides a deprecated member but is not marked as deprecated itself. Please add the '@Deprecated' annotation or suppress the diagnostic.
+w: file:///home/runner/work/qingfeng-files/qingfeng-files/app/src/main/java/com/qingfeng/files/ui/browse/BrowseActivity.kt:306:38 'fun onBackPressed(): Unit' is deprecated. This method has been deprecated in favor of using the
       {@link OnBackPressedDispatcher} via {@link #getOnBackPressedDispatcher()}.
       The OnBackPressedDispatcher controls how back button events are dispatched
       to one or more {@link OnBackPressedCallback} objects.
 
+> Task :app:mergeExtDexDebug
 > Task :app:compileDebugJavaWithJavac
 > Task :app:dexBuilderDebug
 > Task :app:mergeDebugGlobalSynthetics
 > Task :app:processDebugJavaRes
+> Task :app:mergeDebugJniLibFolders
+> Task :app:mergeLibDexDebug
+> Task :app:mergeDebugNativeLibs NO-SOURCE
+> Task :app:stripDebugDebugSymbols NO-SOURCE
+> Task :app:validateSigningDebug
+> Task :app:writeDebugAppMetadata
+> Task :app:writeDebugSigningConfigVersions
 > Task :app:mergeProjectDexDebug
 > Task :app:mergeDebugJavaResource
 > Task :app:packageDebug
 > Task :app:createDebugApkListingFileRedirect
 > Task :app:assembleDebug
 
-BUILD SUCCESSFUL in 1m 38s
+BUILD SUCCESSFUL in 1m 14s
 36 actionable tasks: 36 executed
