@@ -1,9 +1,9 @@
 plugins {
     id 'com.android.application'
     id 'org.jetbrains.kotlin.android'
+    id 'org.jetbrains.kotlin.plugin.parcelize'
 }
 
-// 固定签名密钥：保证每次构建签名一致，用户可直接覆盖安装，无需卸载
 def keystoreProps = [
         storeFile : rootProject.file("keystore/qingfeng.jks"),
         storePass : "qingfeng2026",
@@ -11,7 +11,6 @@ def keystoreProps = [
         keyPass   : "qingfeng2026"
 ]
 
-// 版本号由 CI 注入 BUILD_NUMBER（= GitHub run number，单调递增）
 def buildNumber = (System.getenv("BUILD_NUMBER") ?: "1").toInteger()
 
 android {
@@ -65,9 +64,14 @@ android {
 
 dependencies {
     implementation 'androidx.core:core-ktx:1.13.1'
+    implementation 'androidx.activity:activity-ktx:1.9.3'
     implementation 'androidx.appcompat:appcompat:1.7.0'
     implementation 'com.google.android.material:material:1.12.0'
     implementation 'androidx.constraintlayout:constraintlayout:2.2.0'
     implementation 'androidx.recyclerview:recyclerview:1.3.2'
+    implementation 'androidx.swiperefreshlayout:swiperefreshlayout:1.1.0'
+    implementation 'androidx.lifecycle:lifecycle-livedata-ktx:2.8.7'
+    implementation 'androidx.lifecycle:lifecycle-viewmodel-ktx:2.8.7'
     implementation 'androidx.lifecycle:lifecycle-runtime-ktx:2.8.7'
+    implementation 'org.jetbrains.kotlinx:kotlinx-coroutines-android:1.8.1'
 }
