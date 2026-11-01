@@ -22,4 +22,21 @@ interface FileSource {
 
     /** 新建文件夹 */
     suspend fun mkdir(parent: String, name: String): Boolean
+
+    /** 复制到目标目录 */
+    suspend fun copy(item: FileItem, destDir: String): Boolean
+
+    /** 移动到目标目录 */
+    suspend fun move(item: FileItem, destDir: String): Boolean
+
+    /**
+     * 搜索：在 base 下递归找名字含 keyword 的项。
+     * limit 控制返回条数，避免大目录卡死。
+     */
+    suspend fun search(base: String, keyword: String, limit: Int = 200): List<FileItem>
+
+    /**
+     * 按分类扫描：在 base 下递归找出属于该分类的文件。
+     */
+    suspend fun scanCategory(base: String, category: Category, limit: Int = 300): List<FileItem>
 }
