@@ -5,6 +5,9 @@ import androidx.lifecycle.MutableLiveData
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import com.qingfeng.files.data.Category
+import com.qingfeng.files.data.Filter
+import com.qingfeng.files.data.SortType
+import com.qingfeng.files.data.sortedBy
 import com.qingfeng.files.data.FileError
 import com.qingfeng.files.data.FileItem
 import com.qingfeng.files.data.FileSource
@@ -21,8 +24,17 @@ class BrowseViewModel : ViewModel() {
     private val source: FileSource = LocalFileSource()
     private val pathStack = ArrayDeque<String>()
 
+    /** 未经筛选排序的原始列表 */
+    private var rawItems: List<FileItem> = emptyList()
+
     private val _items = MutableLiveData<List<FileItem>>()
     val items: LiveData<List<FileItem>> = _items
+
+    private var filter: Filter = Filter()
+    private var sortType: SortType = SortType.NAME
+
+    fun currentFilter(): Filter = filter
+    fun currentSort(): SortType = sortType
 
     private val _currentPath = MutableLiveData<String>()
     val currentPath: LiveData<String> = _currentPath
@@ -35,6 +47,23 @@ class BrowseViewModel : ViewModel() {
 
     private val _canGoUp = MutableLiveData<Boolean>()
     val canGoUp: LiveData<Boolean> = _canGoUp
+
+
+    /** 筛选 + 排序，然后推给 UI */
+    private fun publish() {
+        val shown = rawItems.filter { filter.match(it) }.sortedBy(sortType)
+        _items.value = shown
+    }
+
+    fun applyFilter(f: Filter) {
+        filter = f
+        publish()
+    }
+
+    fun applySort(t: SortType) {
+        sortType = t
+        publish()
+    }
 
     fun start() {
         if (pathStack.isEmpty()) {
@@ -52,7 +81,8 @@ class BrowseViewModel : ViewModel() {
             _canGoUp.value = pathStack.size > 1
             try {
                 val list = withContext(Dispatchers.IO) { source.list(path) }
-                _items.value = list
+                rawItems = list
+                publish()
             } catch (e: FileError) {
                 _error.value = e.message
                 _items.value = emptyList()
@@ -119,10 +149,10 @@ class BrowseViewModel : ViewModel() {
     }
 
     fun currentPathValue(): String = pathStack.lastOrNull() ?: source.rootPath()
+    fun rootPathValue(): String = source.rootPath()
 
-    /** 是否处于"普通目录浏览"（既非搜索也非分类） */
-    fun isPlainBrowse(): Boolean =
-        _searchResults.value == null && _categoryResults.value == null
+    /** 是否处于"普通目录浏览"（非搜索） */
+    fun isPlainBrowse(): Boolean = _searchResults.value == null
 
     // ---------- 搜索 ----------
     private val _searchResults = MutableLiveData<List<FileItem>?>()
@@ -149,38 +179,6 @@ class BrowseViewModel : ViewModel() {
     }
 
     fun clearSearch() { _searchResults.value = null }
-
-    // ---------- 分类浏览 ----------
-    private val _categoryResults = MutableLiveData<List<FileItem>?>()
-    val categoryResults: LiveData<List<FileItem>?> = _categoryResults
-    private val _categoryLabel = MutableLiveData<String?>()
-    val categoryLabel: LiveData<String?> = _categoryLabel
-
-    fun openCategory(category: Category) {
-        viewModelScope.launch {
-            _loading.value = true
-            _categoryLabel.value = category.label
-            try {
-                val r = withContext(Dispatchers.IO) {
-                    source.scanCategory(source.rootPath(), category)
-                }
-                _categoryResults.value = r
-            } catch (e: FileError) {
-                _error.value = e.message
-                _categoryResults.value = emptyList()
-            } catch (e: Exception) {
-                _error.value = e.message ?: "扫描失败"
-                _categoryResults.value = emptyList()
-            } finally {
-                _loading.value = false
-            }
-        }
-    }
-
-    fun clearCategory() {
-        _categoryResults.value = null
-        _categoryLabel.value = null
-    }
 
     // ---------- 复制 / 移动 / 新建 ----------
     fun copyTo(item: FileItem, destDir: String) {
