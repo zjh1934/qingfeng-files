@@ -53,7 +53,7 @@ class BrowseActivity : BaseActivity() {
             emptyText.visibility = if (list.isEmpty()) View.VISIBLE else View.GONE
             swipe.isRefreshing = false
         }
-        viewModel.currentPath.observe(this) { pathText.text = path }
+        viewModel.currentPath.observe(this) { path -> pathText.text = path }
         viewModel.error.observe(this) { msg ->
             if (!msg.isNullOrEmpty()) Toast.makeText(this, msg, Toast.LENGTH_SHORT).show()
         }
