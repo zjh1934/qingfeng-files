@@ -9,6 +9,7 @@ import android.provider.Settings
 import android.widget.Button
 import android.widget.TextView
 import com.qingfeng.files.base.BaseActivity
+import com.qingfeng.files.BuildConfig
 import com.qingfeng.files.ui.browse.BrowseActivity
 
 /**
