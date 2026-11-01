@@ -24,6 +24,7 @@ class MainActivity : BaseActivity() {
 
         val statusText = findViewById<TextView>(R.id.tvStatus)
         val button = findViewById<Button>(R.id.btnAction)
+        findViewById<TextView>(R.id.tvVersion).text = "v${BuildConfig.VERSION_NAME}"
 
         refresh(statusText, button)
 
