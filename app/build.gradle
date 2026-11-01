@@ -3,6 +3,17 @@ plugins {
     id 'org.jetbrains.kotlin.android'
 }
 
+// 固定签名密钥：保证每次构建签名一致，用户可直接覆盖安装，无需卸载
+def keystoreProps = [
+        storeFile : rootProject.file("keystore/qingfeng.jks"),
+        storePass : "qingfeng2026",
+        keyAlias  : "qingfeng",
+        keyPass   : "qingfeng2026"
+]
+
+// 版本号由 CI 注入 BUILD_NUMBER（= GitHub run number，单调递增）
+def buildNumber = (System.getenv("BUILD_NUMBER") ?: "1").toInteger()
+
 android {
     namespace 'com.qingfeng.files'
     compileSdk 36
@@ -11,12 +22,28 @@ android {
         applicationId "com.qingfeng.files"
         minSdk 26
         targetSdk 36
-        versionCode 1
-        versionName "1.0.0-QF"
+        versionCode buildNumber
+        versionName "1.0.${buildNumber}"
+    }
+
+    signingConfigs {
+        qingfeng {
+            storeFile keystoreProps.storeFile
+            storePassword keystoreProps.storePass
+            keyAlias keystoreProps.keyAlias
+            keyPassword keystoreProps.keyPass
+            enableV1Signing true
+            enableV2Signing true
+            enableV3Signing false
+        }
     }
 
     buildTypes {
+        debug {
+            signingConfig signingConfigs.qingfeng
+        }
         release {
+            signingConfig signingConfigs.qingfeng
             minifyEnabled false
             proguardFiles getDefaultProguardFile('proguard-android-optimize.txt'), 'proguard-rules.pro'
         }
