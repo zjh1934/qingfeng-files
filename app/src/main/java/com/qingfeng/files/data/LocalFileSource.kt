@@ -116,13 +116,6 @@ class LocalFileSource : FileSource {
         return out
     }
 
-    override suspend fun scanCategory(base: String, category: Category, limit: Int): List<FileItem> {
-        val root = File(base)
-        if (!root.exists()) throw FileError.NotFound(base)
-        val out = ArrayList<FileItem>()
-        walk(root, out, limit) { f -> !f.isDirectory && f.extension.lowercase() in category.exts }
-        return out.sortedByDescending { it.lastModified }
-    }
 
     /** 深度优先遍历，达到 limit 或超时即停，避免大目录卡死 */
     private fun walk(root: File, out: MutableList<FileItem>, limit: Int, match: (File) -> Boolean) {
