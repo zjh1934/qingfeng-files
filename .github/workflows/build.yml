@@ -5,6 +5,9 @@ on:
   push:
     branches: [ main, master ]
 
+permissions:
+  contents: write
+
 jobs:
   build:
     runs-on: ubuntu-latest
@@ -18,14 +21,12 @@ jobs:
           java-version: '17'
           distribution: 'temurin'
 
-      - name: 准备 Gradle 8.7
+      - name: 准备 Gradle
         run: |
           chmod +x ./gradlew || true
           if [ -f gradle/wrapper/gradle-wrapper.jar ]; then
-            echo "使用仓库自带的 gradle wrapper"
             echo "GRADLE_CMD=./gradlew" >> $GITHUB_ENV
           else
-            echo "wrapper jar 缺失，改用官方发行的 Gradle 8.7"
             curl -sSL -o /tmp/gradle.zip https://services.gradle.org/distributions/gradle-8.7-bin.zip
             unzip -q -o /tmp/gradle.zip -d /opt
             chmod +x /opt/gradle-8.7/bin/gradle
@@ -38,11 +39,21 @@ jobs:
       - name: 构建 Release APK
         run: $GRADLE_CMD assembleRelease --stacktrace
 
-      - name: 上传 APK
+      - name: 把 APK 直接提交回仓库（便于外部直连下载）
+        run: |
+          mkdir -p prebuilt
+          cp app/build/outputs/apk/debug/app-debug.apk   prebuilt/qingfeng-files-debug.apk
+          cp app/build/outputs/apk/release/app-release-unsigned.apk prebuilt/qingfeng-files-release-unsigned.apk 2>/dev/null || true
+          ls -lh prebuilt/
+          git config user.name  "qingfeng-bot"
+          git config user.email "bot@qingfeng.local"
+          git add -f prebuilt
+          git diff --cached --quiet && echo "无变化" || git commit -m "prebuilt: APK from run ${GITHUB_RUN_NUMBER}"
+          git push origin main
+
+      - name: 上传 artifact（备用）
         uses: actions/upload-artifact@v4
         with:
           name: qingfeng-files-apk
-          path: |
-            app/build/outputs/apk/debug/*.apk
-            app/build/outputs/apk/release/*.apk
+          path: app/build/outputs/apk/**/*.apk
           if-no-files-found: error
