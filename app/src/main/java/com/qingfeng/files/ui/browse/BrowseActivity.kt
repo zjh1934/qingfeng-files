@@ -8,6 +8,7 @@ import android.widget.TextView
 import android.widget.Toast
 import androidx.activity.viewModels
 import androidx.core.content.FileProvider
+import androidx.recyclerview.widget.GridLayoutManager
 import androidx.recyclerview.widget.LinearLayoutManager
 import androidx.recyclerview.widget.RecyclerView
 import androidx.swiperefreshlayout.widget.SwipeRefreshLayout
@@ -17,54 +18,70 @@ import com.qingfeng.files.R
 import com.qingfeng.files.base.BaseActivity
 import com.qingfeng.files.data.Category
 import com.qingfeng.files.data.FileItem
+import com.qingfeng.files.data.Filter
+import com.qingfeng.files.data.SortType
 import java.io.File
 
 /**
- * 文件浏览主页面：浏览 + 搜索 + 分类 + 基本操作。
+ * 文件浏览主页面。
+ *
+ * 借鉴参照物的设计：
+ * - 分类是**筛选器**（在当前列表上收窄），不是"扫盘出结果页"
+ * - 有排序切换、列表/网格切换
+ * - 路径用面包屑分段显示，点一段跳回那一级
  */
 class BrowseActivity : BaseActivity() {
 
     private val viewModel: BrowseViewModel by viewModels()
     private lateinit var adapter: FileAdapter
     private lateinit var recycler: RecyclerView
-    private lateinit var pathText: TextView
+    private lateinit var pathBar: android.widget.LinearLayout
     private lateinit var emptyText: TextView
     private lateinit var swipe: SwipeRefreshLayout
-    private lateinit var chipBar: com.google.android.material.chip.ChipGroup
+    private lateinit var statusText: TextView
+
+    private var isGrid = false
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         setContentView(R.layout.activity_browse)
 
-        pathText = findViewById(R.id.tvPath)
+        pathBar = findViewById(R.id.pathBar)
         emptyText = findViewById(R.id.tvEmpty)
         swipe = findViewById(R.id.swipeRefresh)
         recycler = findViewById(R.id.recycler)
-        chipBar = findViewById(R.id.chipBar)
+        statusText = findViewById(R.id.tvStatus)
 
         adapter = FileAdapter(
             onItemClick = { onItemClick(it) },
             onItemLongClick = { showItemMenu(it) }
         )
-        recycler.layoutManager = LinearLayoutManager(this)
+        applyLayoutManager()
         recycler.adapter = adapter
 
-        setupChips()
         swipe.setOnRefreshListener { viewModel.open(viewModel.currentPathValue()) }
 
-        // 三种数据源互斥：搜索 > 分类 > 目录浏览
+        findViewById<View>(R.id.btnSort).setOnClickListener { showSortDialog() }
+        findViewById<View>(R.id.btnFilter).setOnClickListener { showFilterDialog() }
+        findViewById<View>(R.id.btnView).setOnClickListener { toggleViewMode() }
+        findViewById<View>(R.id.btnSearch).setOnClickListener { showSearchDialog() }
+
         viewModel.items.observe(this) { list ->
-            if (viewModel.isPlainBrowse()) render(list)
+            if (viewModel.isPlainBrowse()) {
+                adapter.submitList(list)
+                emptyText.visibility = if (list.isEmpty()) View.VISIBLE else View.GONE
+                updateStatus(list.size)
+            }
+            swipe.isRefreshing = false
         }
         viewModel.searchResults.observe(this) { list ->
-            if (list != null) render(list, "搜索结果 ${list.size} 项")
+            if (list != null) {
+                adapter.submitList(list)
+                emptyText.visibility = if (list.isEmpty()) View.VISIBLE else View.GONE
+                updateStatus(list.size, "搜索结果")
+            }
         }
-        viewModel.categoryResults.observe(this) { list ->
-            if (list != null) render(list, "${viewModel.categoryLabel.value ?: "分类"} ${list.size} 项")
-        }
-        viewModel.currentPath.observe(this) { path ->
-            if (viewModel.isPlainBrowse()) pathText.text = path
-        }
+        viewModel.currentPath.observe(this) { if (viewModel.isPlainBrowse()) renderBreadcrumb(it) }
         viewModel.error.observe(this) { msg ->
             if (!msg.isNullOrEmpty()) Toast.makeText(this, msg, Toast.LENGTH_SHORT).show()
         }
@@ -72,49 +89,127 @@ class BrowseActivity : BaseActivity() {
         viewModel.start()
     }
 
-    private fun render(list: List<FileItem>, titleOverride: String? = null) {
-        adapter.submitList(list)
-        emptyText.visibility = if (list.isEmpty()) View.VISIBLE else View.GONE
-        swipe.isRefreshing = false
-        if (titleOverride != null) pathText.text = titleOverride
+    private fun updateStatus(count: Int, prefix: String = "共") {
+        val f = viewModel.currentFilter()
+        val suffix = if (f.isEmpty()) "" else "（已筛选）"
+        statusText.text = "$prefix $count 项$suffix"
     }
 
-    private fun setupChips() {
-        val cats = listOf(null) + Category.values().toList()
-        for (c in cats) {
-            val chip = com.google.android.material.chip.Chip(this).apply {
-                text = c?.label ?: "全部文件"
-                isCheckable = true
-                isChecked = (c == null)
+    private fun applyLayoutManager() {
+        recycler.layoutManager =
+            if (isGrid) GridLayoutManager(this, 3) else LinearLayoutManager(this)
+    }
+
+    private fun toggleViewMode() {
+        isGrid = !isGrid
+        applyLayoutManager()
+    }
+
+    /** 面包屑：把路径拆成一段段，点一段跳回那一级 */
+    private fun renderBreadcrumb(path: String) {
+        pathBar.removeAllViews()
+        val root = viewModel.rootPathValue()
+        val rel = path.removePrefix(root).trim('/')
+        val segs = mutableListOf("根目录")
+        if (rel.isNotEmpty()) segs.addAll(rel.split('/'))
+        segs.forEachIndexed { i, name ->
+            if (i > 0) {
+                val sep = TextView(this).apply { text = " › " }
+                pathBar.addView(sep)
             }
-            chip.setOnCheckedChangeListener { _, isChecked ->
-                if (!isChecked) return@setOnCheckedChangeListener
-                if (c == null) {
-                    viewModel.clearCategory()
-                    viewModel.clearSearch()
-                    viewModel.open(viewModel.currentPathValue())
-                } else {
-                    viewModel.clearSearch()
-                    viewModel.openCategory(c)
+            val tv = TextView(this).apply {
+                text = name
+                textSize = 13f
+                setTextColor(resources.getColor(R.color.primary, theme))
+                setOnClickListener {
+                    // 回退到这一级
+                    repeat(segs.size - 1 - i) { viewModel.goUp() }
                 }
             }
-            chipBar.addView(chip)
+            pathBar.addView(tv)
         }
-
-        val searchChip = com.google.android.material.chip.Chip(this).apply {
-            text = "搜索"
-            isCheckable = false
-        }
-        searchChip.setOnClickListener { showSearchDialog() }
-        chipBar.addView(searchChip)
-
-        val newFolderChip = com.google.android.material.chip.Chip(this).apply {
-            text = "新建文件夹"
-            isCheckable = false
-        }
-        newFolderChip.setOnClickListener { showNewFolderDialog() }
-        chipBar.addView(newFolderChip)
     }
+
+    private fun showSortDialog() {
+        val labels = SortType.values().map { it.label }.toTypedArray()
+        val cur = SortType.values().indexOf(viewModel.currentSort())
+        MaterialAlertDialogBuilder(this)
+            .setTitle("排序方式")
+            .setSingleChoiceItems(labels, cur) { d, which ->
+                viewModel.applySort(SortType.values()[which])
+                d.dismiss()
+            }
+            .show()
+    }
+
+    private fun showFilterDialog() {
+        val cur = viewModel.currentFilter()
+        val catLabels = Category.values().map { it.label }.toTypedArray()
+        val catChecked = BooleanArray(catLabels.size) { i -> Category.values()[i] in cur.categories }
+
+        val sizeLabels = arrayOf("不限", "< 1MB", "1–10MB", "10–100MB", "> 100MB")
+        val sizeIdx = when {
+            cur.sizeFrom == null && cur.sizeTo == null -> 0
+            cur.sizeTo != null && cur.sizeTo <= 1_048_576L -> 1
+            cur.sizeFrom == 1_048_576L -> 2
+            cur.sizeFrom == 10_485_760L -> 3
+            else -> 4
+        }
+
+        val timeLabels = arrayOf("不限", "今天", "最近 7 天", "最近 30 天", "更早")
+        val timeIdx = when {
+            cur.timeFrom == null && cur.timeTo == null -> 0
+            cur.timeFrom != null && cur.timeFrom >= todayStart() -> 1
+            cur.timeFrom != null && cur.timeFrom >= daysAgo(7) -> 2
+            cur.timeFrom != null && cur.timeFrom >= daysAgo(30) -> 3
+            else -> 4
+        }
+
+        val hiddenLabels = arrayOf("显示隐藏文件")
+        val hiddenChecked = booleanArrayOf(cur.showHidden)
+
+        MaterialAlertDialogBuilder(this)
+            .setTitle("筛选")
+            .setMultiChoiceItems(catLabels, catChecked) { _, w, c -> catChecked[w] = c }
+            .setSingleChoiceItems(sizeLabels, sizeIdx) { _, _ -> }
+            .setNegativeButton("取消", null)
+            .setNeutralButton("清除筛选") { _, _ -> viewModel.applyFilter(Filter()) }
+            .setPositiveButton("应用") { _, _ ->
+                val cats = Category.values().filterIndexed { i, _ -> catChecked[i] }.toSet()
+                val (sf, st) = sizeRangeOf(indexOfSize(sizeLabels, sizeIdx))
+                val (tf, tt) = timeRangeOf(indexOfTime(timeLabels, timeIdx))
+                viewModel.applyFilter(Filter(cats, sf, st, tf, tt, hiddenChecked[0]))
+            }
+            .show()
+    }
+
+    private fun indexOfSize(labels: Array<String>, idx: Int) = idx
+    private fun indexOfTime(labels: Array<String>, idx: Int) = idx
+
+    private fun sizeRangeOf(i: Int): Pair<Long?, Long?> = when (i) {
+        1 -> 0L to 1_048_576L
+        2 -> 1_048_576L to 10_485_760L
+        3 -> 10_485_760L to 104_857_600L
+        4 -> 104_857_600L to null
+        else -> null to null
+    }
+
+    private fun timeRangeOf(i: Int): Pair<Long?, Long?> = when (i) {
+        1 -> todayStart() to null
+        2 -> daysAgo(7) to null
+        3 -> daysAgo(30) to null
+        4 -> null to daysAgo(30)
+        else -> null to null
+    }
+
+    private fun todayStart(): Long = java.util.Calendar.getInstance().apply {
+        set(java.util.Calendar.HOUR_OF_DAY, 0)
+        set(java.util.Calendar.MINUTE, 0)
+        set(java.util.Calendar.SECOND, 0)
+        set(java.util.Calendar.MILLISECOND, 0)
+    }.timeInMillis
+
+    private fun daysAgo(n: Int): Long = System.currentTimeMillis() - n * 86_400_000L
 
     private fun showSearchDialog() {
         val input = TextInputEditText(this).apply { hint = "文件名关键字" }
@@ -124,23 +219,7 @@ class BrowseActivity : BaseActivity() {
             .setNegativeButton("取消", null)
             .setPositiveButton("搜索") { _, _ ->
                 val kw = input.text?.toString()?.trim()
-                if (!kw.isNullOrEmpty()) {
-                    viewModel.clearCategory()
-                    viewModel.search(kw)
-                }
-            }
-            .show()
-    }
-
-    private fun showNewFolderDialog() {
-        val input = TextInputEditText(this).apply { hint = "文件夹名称" }
-        MaterialAlertDialogBuilder(this)
-            .setTitle("新建文件夹")
-            .setView(input)
-            .setNegativeButton("取消", null)
-            .setPositiveButton("创建") { _, _ ->
-                val n = input.text?.toString()?.trim()
-                if (!n.isNullOrEmpty()) viewModel.createFolder(n)
+                if (!kw.isNullOrEmpty()) viewModel.search(kw)
             }
             .show()
     }
@@ -180,8 +259,9 @@ class BrowseActivity : BaseActivity() {
 
     private fun pickTargetDir(item: FileItem, move: Boolean) {
         val base = File(viewModel.currentPathValue())
-        val dirs = (base.listFiles()?.filter { it.isDirectory }?.map { it.name } ?: emptyList())
-            .toMutableList().apply { add(0, "..（上一级）") }
+        val dirs = mutableListOf("..（上一级）").apply {
+            addAll(base.listFiles()?.filter { it.isDirectory }?.map { it.name } ?: emptyList())
+        }
         if (dirs.size <= 1) {
             Toast.makeText(this, "当前目录下没有子文件夹", Toast.LENGTH_SHORT).show()
             return
@@ -220,8 +300,9 @@ class BrowseActivity : BaseActivity() {
     }
 
     override fun onBackPressed() {
-        if (viewModel.searchResults.value != null) { viewModel.clearSearch(); viewModel.open(viewModel.currentPathValue()); return }
-        if (viewModel.categoryResults.value != null) { viewModel.clearCategory(); viewModel.open(viewModel.currentPathValue()); return }
+        if (viewModel.searchResults.value != null) {
+            viewModel.clearSearch(); viewModel.open(viewModel.currentPathValue()); return
+        }
         if (!viewModel.goUp()) super.onBackPressed()
     }
 }
