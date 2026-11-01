@@ -2,8 +2,6 @@ name: Build APK
 
 on:
   workflow_dispatch:
-  push:
-    branches: [ main, master ]
 
 permissions:
   contents: write
@@ -11,6 +9,9 @@ permissions:
 jobs:
   build:
     runs-on: ubuntu-latest
+    concurrency:
+      group: qingfeng-build
+      cancel-in-progress: false
     steps:
       - name: 检出代码
         uses: actions/checkout@v4
@@ -37,26 +38,20 @@ jobs:
         env:
           BUILD_NUMBER: ${{ github.run_number }}
         run: |
-          echo "本次 versionCode = $BUILD_NUMBER"
-          $GRADLE_CMD assembleDebug assembleRelease --stacktrace
+          echo "versionCode = $BUILD_NUMBER"
+          $GRADLE_CMD assembleDebug --stacktrace
 
       - name: 提交 APK 回仓库
         run: |
           mkdir -p prebuilt
-          cp app/build/outputs/apk/debug/app-debug.apk        prebuilt/qingfeng-files-debug.apk
-          cp app/build/outputs/apk/release/app-release.apk     prebuilt/qingfeng-files-release.apk 2>/dev/null || \
-            cp app/build/outputs/apk/release/app-release-unsigned.apk prebuilt/qingfeng-files-release.apk 2>/dev/null || true
+          cp app/build/outputs/apk/debug/app-debug.apk prebuilt/qingfeng-files-debug.apk
           ls -lh prebuilt/
           git config user.name  "qingfeng-bot"
           git config user.email "bot@qingfeng.local"
           git add -f prebuilt
-          git diff --cached --quiet && echo "无变化" || git commit -m "prebuilt: v1.0.${GITHUB_RUN_NUMBER}"
-          git pull --rebase origin main
-          git push origin main
-
-      - name: 上传 artifact（备用）
-        uses: actions/upload-artifact@v4
-        with:
-          name: qingfeng-files-apk
-          path: app/build/outputs/apk/**/*.apk
-          if-no-files-found: error
+          if git diff --cached --quiet; then
+            echo "APK 无变化，跳过提交"
+          else
+            git commit -m "prebuilt: v1.0.${GITHUB_RUN_NUMBER}"
+            git push origin HEAD:main
+          fi
