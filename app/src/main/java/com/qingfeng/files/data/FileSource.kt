@@ -35,8 +35,4 @@ interface FileSource {
      */
     suspend fun search(base: String, keyword: String, limit: Int = 200): List<FileItem>
 
-    /**
-     * 按分类扫描：在 base 下递归找出属于该分类的文件。
-     */
-    suspend fun scanCategory(base: String, category: Category, limit: Int = 300): List<FileItem>
 }
