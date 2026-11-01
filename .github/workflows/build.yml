@@ -33,22 +33,25 @@ jobs:
             echo "GRADLE_CMD=/opt/gradle-8.7/bin/gradle" >> $GITHUB_ENV
           fi
 
-      - name: 构建 Debug APK
-        run: $GRADLE_CMD assembleDebug --stacktrace
+      - name: 构建 APK（固定签名 + 递增版本号）
+        env:
+          BUILD_NUMBER: ${{ github.run_number }}
+        run: |
+          echo "本次 versionCode = $BUILD_NUMBER"
+          $GRADLE_CMD assembleDebug assembleRelease --stacktrace
 
-      - name: 构建 Release APK
-        run: $GRADLE_CMD assembleRelease --stacktrace
-
-      - name: 把 APK 直接提交回仓库（便于外部直连下载）
+      - name: 提交 APK 回仓库
         run: |
           mkdir -p prebuilt
-          cp app/build/outputs/apk/debug/app-debug.apk   prebuilt/qingfeng-files-debug.apk
-          cp app/build/outputs/apk/release/app-release-unsigned.apk prebuilt/qingfeng-files-release-unsigned.apk 2>/dev/null || true
+          cp app/build/outputs/apk/debug/app-debug.apk        prebuilt/qingfeng-files-debug.apk
+          cp app/build/outputs/apk/release/app-release.apk     prebuilt/qingfeng-files-release.apk 2>/dev/null || \
+            cp app/build/outputs/apk/release/app-release-unsigned.apk prebuilt/qingfeng-files-release.apk 2>/dev/null || true
           ls -lh prebuilt/
           git config user.name  "qingfeng-bot"
           git config user.email "bot@qingfeng.local"
           git add -f prebuilt
-          git diff --cached --quiet && echo "无变化" || git commit -m "prebuilt: APK from run ${GITHUB_RUN_NUMBER}"
+          git diff --cached --quiet && echo "无变化" || git commit -m "prebuilt: v1.0.${GITHUB_RUN_NUMBER}"
+          git pull --rebase origin main
           git push origin main
 
       - name: 上传 artifact（备用）
