@@ -4,6 +4,7 @@ import androidx.lifecycle.LiveData
 import androidx.lifecycle.MutableLiveData
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
+import com.qingfeng.files.data.Category
 import com.qingfeng.files.data.FileError
 import com.qingfeng.files.data.FileItem
 import com.qingfeng.files.data.FileSource
@@ -118,4 +119,97 @@ class BrowseViewModel : ViewModel() {
     }
 
     fun currentPathValue(): String = pathStack.lastOrNull() ?: source.rootPath()
+
+    /** 是否处于"普通目录浏览"（既非搜索也非分类） */
+    fun isPlainBrowse(): Boolean =
+        _searchResults.value == null && _categoryResults.value == null
+
+    // ---------- 搜索 ----------
+    private val _searchResults = MutableLiveData<List<FileItem>?>()
+    val searchResults: LiveData<List<FileItem>?> = _searchResults
+
+    fun search(keyword: String) {
+        viewModelScope.launch {
+            _loading.value = true
+            try {
+                val r = withContext(Dispatchers.IO) {
+                    source.search(currentPathValue(), keyword)
+                }
+                _searchResults.value = r
+            } catch (e: FileError) {
+                _error.value = e.message
+                _searchResults.value = emptyList()
+            } catch (e: Exception) {
+                _error.value = e.message ?: "搜索失败"
+                _searchResults.value = emptyList()
+            } finally {
+                _loading.value = false
+            }
+        }
+    }
+
+    fun clearSearch() { _searchResults.value = null }
+
+    // ---------- 分类浏览 ----------
+    private val _categoryResults = MutableLiveData<List<FileItem>?>()
+    val categoryResults: LiveData<List<FileItem>?> = _categoryResults
+    private val _categoryLabel = MutableLiveData<String?>()
+    val categoryLabel: LiveData<String?> = _categoryLabel
+
+    fun openCategory(category: Category) {
+        viewModelScope.launch {
+            _loading.value = true
+            _categoryLabel.value = category.label
+            try {
+                val r = withContext(Dispatchers.IO) {
+                    source.scanCategory(source.rootPath(), category)
+                }
+                _categoryResults.value = r
+            } catch (e: FileError) {
+                _error.value = e.message
+                _categoryResults.value = emptyList()
+            } catch (e: Exception) {
+                _error.value = e.message ?: "扫描失败"
+                _categoryResults.value = emptyList()
+            } finally {
+                _loading.value = false
+            }
+        }
+    }
+
+    fun clearCategory() {
+        _categoryResults.value = null
+        _categoryLabel.value = null
+    }
+
+    // ---------- 复制 / 移动 / 新建 ----------
+    fun copyTo(item: FileItem, destDir: String) {
+        viewModelScope.launch {
+            try {
+                withContext(Dispatchers.IO) { source.copy(item, destDir) }
+                open(pathStack.last())
+            } catch (e: FileError) { _error.value = e.message }
+            catch (e: Exception) { _error.value = e.message ?: "复制失败" }
+        }
+    }
+
+    fun moveTo(item: FileItem, destDir: String) {
+        viewModelScope.launch {
+            try {
+                withContext(Dispatchers.IO) { source.move(item, destDir) }
+                open(pathStack.last())
+            } catch (e: FileError) { _error.value = e.message }
+            catch (e: Exception) { _error.value = e.message ?: "移动失败" }
+        }
+    }
+
+    fun createFolder(name: String) {
+        viewModelScope.launch {
+            try {
+                withContext(Dispatchers.IO) { source.mkdir(pathStack.last(), name) }
+                open(pathStack.last())
+            } catch (e: FileError) { _error.value = e.message }
+            catch (e: Exception) { _error.value = e.message ?: "新建失败" }
+        }
+    }
 }
