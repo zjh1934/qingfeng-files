@@ -1,7 +1,9 @@
 package com.qingfeng.files.data
 
+import android.content.pm.PackageInfo
 import android.content.pm.PackageManager
 import android.os.Build
+import com.qingfeng.files.AppContext
 import java.io.File
 import java.security.MessageDigest
 import java.util.zip.ZipFile
@@ -9,70 +11,73 @@ import java.util.zip.ZipFile
 /**
  * APK 解析器。
  *
- * 借鉴点（实测参照物）：
+ * 借鉴点（实测参照物 `res/layout/bg.xml`）：
  * - 显示 **Sign MD5**（`ajp`）—— 签名指纹，判断来源可信度
  * - 区分 Version 与 **Target Version**（API 级别）
  * - 权限列表 + **敏感权限**标注（`db`/`bw`/`c7`）
- * - 已安装应用额外显示首次/最后安装时间（`cq`/`cz`）
  *
- * 实现：Android 10+ 用 `PackageManager.getPackageArchiveInfo`，
- * 签名指纹从 APK 里的签名文件算。
+ * 实现：用 `PackageManager.getPackageArchiveInfo()` 读未安装的 APK。
  */
 class ApkParser {
 
     fun parse(file: File): ApkInfo? {
-        val pm = AppContext.get().packageManager
-        @Suppress("DEPRECATION")
-        val info = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
-            pm.getPackageArchiveInfo(
-                file.absolutePath,
-                PackageManager.PackageInfoFlags.of(
-                    (PackageManager.GET_PERMISSIONS or PackageManager.GET_SIGNATURES).toLong()
-                )
-            )
-        } else {
-            @Suppress("DEPRECATION")
-            pm.getPackageArchiveInfo(
-                file.absolutePath,
-                PackageManager.GET_PERMISSIONS or PackageManager.GET_SIGNATURES
-            )
-        } ?: return null
+        val pm: PackageManager = AppContext.get().packageManager
+        val info: PackageInfo = readArchiveInfo(pm, file) ?: return null
 
-        info.applicationInfo?.let {
-            it.sourceDir = file.absolutePath
-            it.publicSourceDir = file.absolutePath
+        // 让系统能找到 APK 里的资源（否则取不到应用名）
+        val appInfo = info.applicationInfo
+        if (appInfo != null) {
+            appInfo.sourceDir = file.absolutePath
+            appInfo.publicSourceDir = file.absolutePath
         }
 
-        val pkg = info.packageName
-        val label = info.applicationInfo?.let {
-            pm.getApplicationLabel(it).toString()
-        } ?: pkg
+        val pkg: String = info.packageName ?: return null
+        val label: String = appInfo?.let { pm.getApplicationLabel(it).toString() } ?: pkg
 
-        val perms = info.requestedPermissions?.toList() ?: emptyList()
+        val perms: List<String> = info.requestedPermissions?.toList() ?: emptyList()
 
-        val signatures = readSignatureBytes(file)
+        val sig = readSignatureBytes(file)
         return ApkInfo(
             filePath = file.absolutePath,
             appName = label,
             packageName = pkg,
             versionName = info.versionName,
-            versionCode = if (Build.VERSION.SDK_INT >= 28) info.longVersionCode else info.versionCode.toLong(),
-            targetSdk = info.applicationInfo?.targetSdkVersion,
-            minSdk = if (Build.VERSION.SDK_INT >= 24) info.applicationInfo?.minSdkVersion else null,
+            versionCode = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.P) {
+                info.longVersionCode
+            } else {
+                @Suppress("DEPRECATION")
+                info.versionCode.toLong()
+            },
+            targetSdk = appInfo?.targetSdkVersion,
+            minSdk = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.N) {
+                appInfo?.minSdkVersion
+            } else null,
             size = file.length(),
             permissions = perms,
-            signMd5 = signatures?.let { md5(it) },
-            signSha1 = signatures?.let { sha1(it) },
-            signSha256 = signatures?.let { sha256(it) }
+            signMd5 = sig?.let { digest("MD5", it) },
+            signSha1 = sig?.let { digest("SHA-1", it) },
+            signSha256 = sig?.let { digest("SHA-256", it) }
         )
+    }
+
+    @Suppress("DEPRECATION")
+    private fun readArchiveInfo(pm: PackageManager, file: File): PackageInfo? {
+        val flags = PackageManager.GET_PERMISSIONS
+        return if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
+            pm.getPackageArchiveInfo(
+                file.absolutePath,
+                PackageManager.PackageInfoFlags.of(flags.toLong())
+            )
+        } else {
+            pm.getPackageArchiveInfo(file.absolutePath, flags)
+        }
     }
 
     /** 从 APK 内签名文件取字节，用于算指纹 */
     private fun readSignatureBytes(file: File): ByteArray? {
         return try {
             ZipFile(file).use { zip ->
-                val entries = zip.entries().toList()
-                val target = entries.firstOrNull {
+                val target = zip.entries().toList().firstOrNull {
                     it.name.startsWith("META-INF/") &&
                         (it.name.endsWith(".RSA") || it.name.endsWith(".DSA") ||
                             it.name.endsWith(".EC"))
@@ -81,10 +86,6 @@ class ApkParser {
             }
         } catch (e: Exception) { null }
     }
-
-    private fun md5(b: ByteArray): String = digest("MD5", b)
-    private fun sha1(b: ByteArray): String = digest("SHA-1", b)
-    private fun sha256(b: ByteArray): String = digest("SHA-256", b)
 
     private fun digest(alg: String, b: ByteArray): String =
         MessageDigest.getInstance(alg).digest(b)
