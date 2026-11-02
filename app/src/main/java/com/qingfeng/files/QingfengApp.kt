@@ -1,13 +1,23 @@
 package com.qingfeng.files
 
 import android.app.Application
+import android.content.Context
 
-/**
- * 应用入口。
- * 目前无全局初始化需求，后续如有（主题、崩溃收集、数据库）放这里。
- */
 class QingfengApp : Application() {
+
     override fun onCreate() {
         super.onCreate()
+        AppContext.set(this)
     }
+}
+
+/** 全局 Context 持有（避免到处传 context） */
+object AppContext {
+    private lateinit var app: Application
+
+    fun set(a: Application) { app = a }
+
+    fun get(): Application = app
+
+    fun context(): Context = app.applicationContext
 }
