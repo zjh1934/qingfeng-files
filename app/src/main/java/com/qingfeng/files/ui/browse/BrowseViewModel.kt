@@ -14,6 +14,9 @@ import com.qingfeng.files.data.FileSource
 import com.qingfeng.files.data.Filter
 import com.qingfeng.files.data.ProgressCallback
 import com.qingfeng.files.data.RecycleBin
+import com.qingfeng.files.data.BookmarkStore
+import com.qingfeng.files.data.StorageEntry
+import com.qingfeng.files.data.Storages
 import com.qingfeng.files.data.FileSources
 import com.qingfeng.files.data.SearchScope
 import com.qingfeng.files.data.SortState
@@ -32,6 +35,7 @@ class BrowseViewModel(app: Application) : AndroidViewModel(app) {
 
     private val source: FileSource = FileSources.local()
     private val recycleBin = RecycleBin.from(getApplication())
+    private val bookmarks = BookmarkStore(getApplication())
     private val prefs = FilePrefs(app)
     private val pathStack = ArrayDeque<String>()
 
@@ -77,6 +81,13 @@ class BrowseViewModel(app: Application) : AndroidViewModel(app) {
     private val _hiddenOn = MutableLiveData<Boolean>(false)
     val hiddenOn: LiveData<Boolean> = _hiddenOn
 
+    // ---------- 书签 ----------
+    private val _bookmarks = MutableLiveData<List<BookmarkStore.Bookmark>>(emptyList())
+    val bookmarkList: LiveData<List<BookmarkStore.Bookmark>> = _bookmarks
+
+    private val _currentBookmarked = MutableLiveData<Boolean>(false)
+    val currentBookmarked: LiveData<Boolean> = _currentBookmarked
+
     private val _trashCount = MutableLiveData<Int>(0)
     val trashCount: LiveData<Int> = _trashCount
 
@@ -95,6 +106,7 @@ class BrowseViewModel(app: Application) : AndroidViewModel(app) {
             pathStack.addLast(root)
             _viewMode.value = prefs.viewModeFor(root)
             refreshTrashCount()
+            refreshBookmarks()
             open(root)
         }
     }
@@ -106,6 +118,7 @@ class BrowseViewModel(app: Application) : AndroidViewModel(app) {
             _currentPath.value = path
             _canGoUp.value = pathStack.size > 1
             _viewMode.value = prefs.viewModeFor(path)
+            _currentBookmarked.value = bookmarks.has(path)
             try {
                 val list = withContext(Dispatchers.IO) { source.list(path) }
                 rawItems = list
@@ -321,4 +334,41 @@ class BrowseViewModel(app: Application) : AndroidViewModel(app) {
     }
 
     fun clearSearch() { _searchResults.value = null }
+
+    // ---------- 书签 ----------
+    fun refreshBookmarks() {
+        _bookmarks.value = bookmarks.list()
+    }
+
+    fun toggleBookmarkCurrent(): Boolean {
+        val path = currentPathValue()
+        val added = bookmarks.toggle(path, path.substringAfterLast('/').ifEmpty { path }, true)
+        _currentBookmarked.value = added
+        refreshBookmarks()
+        return added
+    }
+
+    fun toggleBookmark(item: FileItem) {
+        bookmarks.toggle(item.path, item.name, item.isDirectory)
+        refreshBookmarks()
+    }
+
+    fun removeBookmark(path: String) { bookmarks.remove(path); refreshBookmarks() }
+
+    /** 跳到书签：清空路径栈再打开 */
+    fun openBookmark(b: BookmarkStore.Bookmark) {
+        pathStack.clear()
+        pathStack.addLast(b.path)
+        open(b.path)
+    }
+
+    // ---------- 存储切换 ----------
+    fun storages(): List<StorageEntry> = Storages.list()
+
+    /** 切换存储：清空路径栈再打开 */
+    fun switchStorage(e: StorageEntry) {
+        pathStack.clear()
+        pathStack.addLast(e.path)
+        open(e.path)
+    }
 }
