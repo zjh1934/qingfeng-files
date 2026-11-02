@@ -1,38 +1,21 @@
 package com.qingfeng.files.data
 
 /**
- * 文件来源抽象。
+ * 文件来源接口。
  *
- * 借鉴点（参照物最有价值的一处设计）：
- * 「文件从哪来」和「文件怎么显示」彻底分开。
- * 以后加网上邻居、FTP、云盘，只要再实现一个 FileSource，UI 一行都不用改。
+ * 借鉴点：参照物的文件源接口有 **20+ 个方法**（`ace/lt3`），
+ * 而且有个**工厂方法** `zr5.j(String) → lt3`：
+ * 按路径里的协议前缀（gdrive/googledrive/onedrive/dropbox/mega/box/yandex/pcs）
+ * 返回对应的实现类 —— **一套 UI 接 N 种源**就是靠这个。
+ *
+ * 我们目前只有本地，但接口按"将来要接 N 种源"来设计，
+ * 并预留工厂（FileSources.forPath）。
  */
 interface FileSource {
-    /** 根目录 */
-    fun rootPath(): String
 
-    /** 列出某目录下的内容（目录排前，再按名称排） */
+    // ---------- 浏览 ----------
     suspend fun list(path: String): List<FileItem>
 
-    /** 删除文件或空目录 */
-    suspend fun delete(item: FileItem): Boolean
-
-    /** 重命名 */
-    suspend fun rename(item: FileItem, newName: String): Boolean
-
-    /** 新建文件夹 */
-    suspend fun mkdir(parent: String, name: String): Boolean
-
-    /** 复制到目标目录 */
-    suspend fun copy(item: FileItem, destDir: String): Boolean
-
-    /** 移动到目标目录 */
-    suspend fun move(item: FileItem, destDir: String): Boolean
-
-    /**
-     * 搜索：在 base 下递归找名字含 keyword 的项。
-     * limit 控制返回条数，避免大目录卡死。
-     */
     suspend fun search(
         base: String,
         keyword: String,
@@ -40,4 +23,47 @@ interface FileSource {
         limit: Int = 200
     ): List<FileItem>
 
+    // ---------- 元信息 ----------
+    /** 单个文件的详细信息（不存在返回 null） */
+    suspend fun stat(path: String): FileStat?
+
+    /** 目录里的条目数（用于目录排序按大小） */
+    suspend fun countChildren(path: String): Int
+
+    // ---------- 增删改 ----------
+    suspend fun mkdir(parent: String, name: String): Boolean
+    suspend fun createFile(parent: String, name: String): Boolean
+    suspend fun delete(item: FileItem): Boolean
+    suspend fun deleteAll(items: List<FileItem>): Boolean
+    suspend fun rename(item: FileItem, newName: String): Boolean
+
+    // ---------- 复制 / 移动（带进度） ----------
+    suspend fun copy(item: FileItem, destDir: String, cb: ProgressCallback? = null): Boolean
+    suspend fun copyAll(items: List<FileItem>, destDir: String, cb: ProgressCallback? = null): Boolean
+    suspend fun move(item: FileItem, destDir: String, cb: ProgressCallback? = null): Boolean
+    suspend fun moveAll(items: List<FileItem>, destDir: String, cb: ProgressCallback? = null): Boolean
+
+    // ---------- 读写流 ----------
+    suspend fun openRead(path: String): java.io.InputStream
+    suspend fun openWrite(path: String): java.io.OutputStream
+
+    // ---------- 能力查询 ----------
+    /** 该来源是否支持某能力（云盘可能不支持 rename 等） */
+    fun supports(cap: Capability): Boolean
+
+    fun rootPath(): String
+
+    enum class Capability { CREATE_FILE, RENAME, DELETE, COPY, MOVE, STREAM, SEARCH }
+}
+
+/**
+ * 文件源工厂（对应参照物的 `zr5.j(String)`）。
+ *
+ * 目前只有本地；将来加网盘时，按路径前缀分发即可，UI 一行不用改。
+ */
+object FileSources {
+    private val local = LocalFileSource()
+
+    fun forPath(path: String): FileSource = local
+    fun local(): FileSource = local
 }
