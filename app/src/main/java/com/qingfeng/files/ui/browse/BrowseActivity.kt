@@ -27,6 +27,7 @@ import com.qingfeng.files.data.SortDir
 import com.qingfeng.files.data.SortField
 import com.qingfeng.files.data.SortState
 import com.qingfeng.files.data.ViewMode
+import com.qingfeng.files.data.BookmarkStore
 import com.qingfeng.files.util.FileFormat
 import java.io.File
 
@@ -45,6 +46,7 @@ class BrowseActivity : BaseActivity() {
     private lateinit var statusText: TextView
     private lateinit var actionBar: LinearLayout
     private lateinit var btnPaste: TextView
+    private lateinit var progressRow: View
     private lateinit var progressBar: android.widget.ProgressBar
     private lateinit var btnCancel: TextView
     private lateinit var btnSelectAll: TextView
@@ -67,6 +69,7 @@ class BrowseActivity : BaseActivity() {
         btnPaste = findViewById(R.id.btnPaste)
         btnSelectAll = findViewById(R.id.btnSelectAll)
         findViewById<FastScroller>(R.id.fastScroller).recyclerView = recycler
+        progressRow = findViewById(R.id.progressRow)
         progressBar = findViewById(R.id.progressBar)
         btnCancel = findViewById(R.id.btnCancel)
 
@@ -85,6 +88,11 @@ class BrowseActivity : BaseActivity() {
         swipe.setOnRefreshListener { viewModel.open(viewModel.currentPathValue()) }
         findViewById<View>(R.id.btnUp).setOnClickListener { if (!viewModel.goUp()) finish() }
         findViewById<View>(R.id.btnTrash).setOnClickListener { openTrash() }
+        findViewById<View>(R.id.btnDevice).setOnClickListener { showStorageMenu() }
+        findViewById<View>(R.id.btnBookmark).setOnClickListener { showBookmarkMenu() }
+        viewModel.currentBookmarked.observe(this) { on ->
+            findViewById<TextView>(R.id.btnBookmark).text = if (on) "★" else "☆"
+        }
         viewModel.trashCount.observe(this) { n ->
             findViewById<TextView>(R.id.btnTrash).text = if (n > 0) "回收站($n)" else "回收站"
         }
@@ -109,9 +117,12 @@ class BrowseActivity : BaseActivity() {
         btnCancel.setOnClickListener { viewModel.cancelPaste() }
         viewModel.progress.observe(this) { pr ->
             if (pr == null) {
+                // 先隐藏子控件，再隐藏容器（容器默认 gone，不先显示子控件就看不见）
                 progressBar.visibility = View.GONE
                 btnCancel.visibility = View.GONE
+                progressRow.visibility = View.GONE
             } else {
+                progressRow.visibility = View.VISIBLE
                 progressBar.visibility = View.VISIBLE
                 btnCancel.visibility = View.VISIBLE
                 val (done, total) = pr
@@ -272,7 +283,7 @@ class BrowseActivity : BaseActivity() {
     // ---------- 多选 ----------
     /** 单文件长按 → 操作菜单（参照物：Open/Copy/Cut/Rename/Delete/Share/Properties...） */
     private fun showFileMenu(item: FileItem) {
-        val opts = mutableListOf("打开", "打开为…", "复制", "剪切", "重命名", "分享", "属性", "多选", "删除")
+        val opts = mutableListOf("打开", "打开为…", "复制", "剪切", "重命名", "分享", "属性", "书签", "多选", "删除")
         MaterialAlertDialogBuilder(this)
             .setTitle(item.name)
             .setItems(opts.toTypedArray()) { _, which ->
@@ -284,8 +295,12 @@ class BrowseActivity : BaseActivity() {
                     4 -> showRenameDialog(item)
                     5 -> shareFile(item)
                     6 -> showProperties(item)
-                    7 -> { enterSelection(item); }
-                    8 -> confirmDeleteOne(item)
+                    7 -> {
+                        viewModel.toggleBookmark(item)
+                        Toast.makeText(this, "已切换书签", Toast.LENGTH_SHORT).show()
+                    }
+                    8 -> { enterSelection(item); }
+                    9 -> confirmDeleteOne(item)
                 }
             }
             .show()
@@ -370,6 +385,50 @@ class BrowseActivity : BaseActivity() {
 
     private fun openTrash() {
         startActivity(Intent(this, TrashActivity::class.java))
+    }
+
+    /** 存储切换（参照物 device_icon） */
+    private fun showStorageMenu() {
+        val list = viewModel.storages()
+        if (list.isEmpty()) { Toast.makeText(this, "没找到其他存储", Toast.LENGTH_SHORT).show(); return }
+        val labels = list.map { it.label + "（" + it.path + "）" }.toTypedArray()
+        MaterialAlertDialogBuilder(this)
+            .setTitle("切换存储")
+            .setItems(labels) { _, i -> viewModel.switchStorage(list[i]) }
+            .show()
+    }
+
+    /** 书签菜单（参照物 f0=Bookmarks / m4=Add Bookmark） */
+    private fun showBookmarkMenu() {
+        val bms = viewModel.bookmarkList.value ?: emptyList()
+        val opts = mutableListOf("把当前目录加入书签 / 取消")
+        opts.addAll(bms.map { it.name + "（" + it.path + "）" })
+        if (bms.isNotEmpty()) opts.add("管理书签…")
+
+        MaterialAlertDialogBuilder(this)
+            .setTitle("书签")
+            .setItems(opts.toTypedArray()) { _, which ->
+                when (which) {
+                    0 -> {
+                        val added = viewModel.toggleBookmarkCurrent()
+                        Toast.makeText(this, if (added) "已加入书签" else "已取消书签", Toast.LENGTH_SHORT).show()
+                    }
+                    else -> {
+                        val idx = which - 1
+                        if (idx < bms.size) viewModel.openBookmark(bms[idx])
+                        else manageBookmarks(bms)
+                    }
+                }
+            }
+            .show()
+    }
+
+    private fun manageBookmarks(bms: List<BookmarkStore.Bookmark>) {
+        val names = bms.map { it.name }.toTypedArray()
+        MaterialAlertDialogBuilder(this)
+            .setTitle("删除书签")
+            .setItems(names) { _, i -> viewModel.removeBookmark(bms[i].path) }
+            .show()
     }
 
     private fun showRenameDialog(item: FileItem) {
