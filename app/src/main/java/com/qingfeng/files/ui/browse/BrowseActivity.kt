@@ -27,7 +27,10 @@ import com.qingfeng.files.data.SortDir
 import com.qingfeng.files.data.SortField
 import com.qingfeng.files.data.SortState
 import com.qingfeng.files.data.ViewMode
+import com.qingfeng.files.data.ArchiveState
 import com.qingfeng.files.data.BookmarkStore
+import com.qingfeng.files.data.CompressLevel
+import com.qingfeng.files.data.ArchiveEngine
 import com.qingfeng.files.util.FileFormat
 import java.io.File
 
@@ -37,6 +40,7 @@ import java.io.File
 class BrowseActivity : BaseActivity() {
 
     private val viewModel: BrowseViewModel by viewModels()
+    private val archiveViewModel: ArchiveViewModel by viewModels()
     private lateinit var adapter: FileAdapter
     private lateinit var recycler: RecyclerView
     private lateinit var pathBar: LinearLayout
@@ -54,6 +58,7 @@ class BrowseActivity : BaseActivity() {
     private val checked = HashSet<String>()
     private var selectionMode = false
     private var lastKeyword = ""
+    private var archiveObserving = false
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
@@ -113,6 +118,11 @@ class BrowseActivity : BaseActivity() {
         findViewById<View>(R.id.btnActionCopy).setOnClickListener { putClipboard(Clipboard.Mode.COPY) }
         findViewById<View>(R.id.btnActionCut).setOnClickListener { putClipboard(Clipboard.Mode.CUT) }
         findViewById<View>(R.id.btnActionDelete).setOnClickListener { confirmDeleteSelected() }
+        findViewById<View>(R.id.btnActionZip).setOnClickListener {
+            val items = adapter.currentList.filter { it.path in checked }
+            if (items.isEmpty()) { Toast.makeText(this, "没有选中文件", Toast.LENGTH_SHORT).show(); return@setOnClickListener }
+            showCompressDialog(items)
+        }
         findViewById<View>(R.id.btnActionClose).setOnClickListener { exitSelection() }
         btnCancel.setOnClickListener { viewModel.cancelPaste() }
         viewModel.progress.observe(this) { pr ->
@@ -283,12 +293,34 @@ class BrowseActivity : BaseActivity() {
     // ---------- 多选 ----------
     /** 单文件长按 → 操作菜单（参照物：Open/Copy/Cut/Rename/Delete/Share/Properties...） */
     private fun showFileMenu(item: FileItem) {
-        val opts = mutableListOf("打开", "打开为…", "复制", "剪切", "重命名", "分享", "属性", "书签", "多选", "删除")
+        val opts = buildFileMenu(item)
         MaterialAlertDialogBuilder(this)
             .setTitle(item.name)
             .setItems(opts.toTypedArray()) { _, which ->
-                when (which) {
-                    0 -> openFile(item)
+                onFileMenuAction(item, opts, which)
+            }
+            .show()
+    }
+
+    private fun buildFileMenu(item: FileItem): List<String> {
+        val o = mutableListOf("打开", "打开为…", "复制", "剪切", "重命名", "分享", "属性")
+        if (item.isDirectory || isArchive(item)) o.add("压缩…")
+        if (isArchive(item)) o.add("解压到…")
+        o.add("查看压缩包内容")
+        o.add("书签")
+        o.add("多选")
+        o.add("删除")
+        return o
+    }
+
+    private fun onFileMenuAction(item: FileItem, opts: List<String>, which: Int) {
+        val label = opts[which]
+        when (label) {
+            "压缩…" -> showCompressDialog(listOf(item))
+            "解压到…" -> showExtractDialog(item)
+            "查看压缩包内容" -> showArchiveContent(item)
+            else -> when (which) {
+                0 -> openFile(item)
                     1 -> openFileAs(item)
                     2 -> { viewModel.putClipboard(listOf(item), Clipboard.Mode.COPY); hintCopied(1, Clipboard.Mode.COPY) }
                     3 -> { viewModel.putClipboard(listOf(item), Clipboard.Mode.CUT); hintCopied(1, Clipboard.Mode.CUT) }
@@ -302,8 +334,126 @@ class BrowseActivity : BaseActivity() {
                     8 -> { enterSelection(item); }
                     9 -> confirmDeleteOne(item)
                 }
+        }
+    }
+
+    // ---------- 压缩 / 解压 ----------
+    private fun isArchive(item: FileItem): Boolean =
+        item.extension.lowercase() in setOf("zip", "jar", "apk")
+
+    /** 压缩对话框：选级别（参照物 array u = Store/Fast/Standard/Best） */
+    private fun showCompressDialog(items: List<FileItem>) {
+        val levels = CompressLevel.values()
+        val labels = levels.map { "${it.label} · ${it.desc}" }.toTypedArray()
+        var chosen = CompressLevel.STANDARD
+        MaterialAlertDialogBuilder(this)
+            .setTitle("压缩 ${items.size} 项")
+            .setSingleChoiceItems(labels, levels.indexOf(chosen)) { _, i -> chosen = levels[i] }
+            .setNegativeButton("取消", null)
+            .setPositiveButton("压缩") { _, _ ->
+                archiveViewModel.level = chosen
+                doCompress(items)
             }
             .show()
+    }
+
+    private fun doCompress(items: List<FileItem>) {
+        val dir = viewModel.currentPathValue()
+        val base = if (items.size == 1) items[0].name else "压缩包"
+        val out = java.io.File(dir, "$base.zip")
+        archiveViewModel.compress(items.map { java.io.File(it.path) }, out)
+        observeArchive()
+    }
+
+    /** 解压对话框：可选解压到子目录（参照物 `ak`="Extract to"） */
+    private fun showExtractDialog(item: FileItem) {
+        var intoSub = true
+        MaterialAlertDialogBuilder(this)
+            .setTitle("解压")
+            .setMultiChoiceItems(
+                arrayOf("解压到同名子目录"),
+                booleanArrayOf(true)
+            ) { _, _, c -> intoSub = c }
+            .setNegativeButton("取消", null)
+            .setPositiveButton("解压") { _, _ ->
+                archiveViewModel.extract(
+                    java.io.File(item.path),
+                    java.io.File(viewModel.currentPathValue()),
+                    intoSub
+                )
+                observeArchive()
+            }
+            .show()
+    }
+
+    private fun showArchiveContent(item: FileItem) {
+        val entries = try {
+            ArchiveEngine().listEntries(java.io.File(item.path))
+        } catch (e: Exception) { null }
+        if (entries == null) {
+            Toast.makeText(this, "读不了这个压缩包", Toast.LENGTH_SHORT).show(); return
+        }
+        val lines = entries.take(200).map { (n, sz) ->
+            "$n（${FileFormat.size(sz)}）"
+        }.toTypedArray()
+        MaterialAlertDialogBuilder(this)
+            .setTitle("${item.name}（${entries.size} 项）")
+            .setItems(lines) { _, _ -> }
+            .setPositiveButton("关闭", null)
+            .show()
+    }
+
+    /** 进度显示 + 可停止（参照物 `ig` 停止确认框） */
+    private fun observeArchive() {
+        if (archiveObserving) return
+        archiveObserving = true
+        archiveViewModel.state.observe(this) { st ->
+            when (st) {
+                is ArchiveState.Running -> {
+                    progressRow.visibility = View.VISIBLE
+                    progressBar.visibility = View.VISIBLE
+                    btnCancel.visibility = View.VISIBLE
+                    progressBar.progress = st.percent
+                    statusText.text =
+                        "${if (st.isCompress) "压缩中" else "解压中"}：${st.currentName}（${st.done}/${st.total}）"
+                    btnCancel.setOnClickListener { confirmStopArchive() }
+                }
+                is ArchiveState.Done -> {
+                    hideProgress()
+                    Toast.makeText(this, "完成，${st.count} 项", Toast.LENGTH_SHORT).show()
+                    viewModel.open(viewModel.currentPathValue())
+                    archiveViewModel.reset()
+                }
+                is ArchiveState.Failed -> {
+                    hideProgress()
+                    Toast.makeText(this, st.reason, Toast.LENGTH_LONG).show()
+                    archiveViewModel.reset()
+                }
+                is ArchiveState.Cancelled -> {
+                    hideProgress()
+                    Toast.makeText(this, "已停止", Toast.LENGTH_SHORT).show()
+                    viewModel.open(viewModel.currentPathValue())
+                    archiveViewModel.reset()
+                }
+                ArchiveState.Idle -> hideProgress()
+            }
+        }
+    }
+
+    private fun confirmStopArchive() {
+        MaterialAlertDialogBuilder(this)
+            .setTitle("确定要停止吗？")
+            .setMessage("当前进度将丢失。")
+            .setNegativeButton("继续", null)
+            .setPositiveButton("停止") { _, _ -> archiveViewModel.stop() }
+            .show()
+    }
+
+    private fun hideProgress() {
+        progressBar.visibility = View.GONE
+        btnCancel.visibility = View.GONE
+        progressRow.visibility = View.GONE
+        btnCancel.setOnClickListener { viewModel.cancelPaste() }
     }
 
     /** 打开为：指定 MIME 类型打开（参照物 "Open As"） */
