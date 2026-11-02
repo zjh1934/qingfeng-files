@@ -4,6 +4,8 @@ import android.content.Intent
 import android.net.Uri
 import android.os.Bundle
 import android.view.View
+import android.widget.CheckBox
+import android.widget.LinearLayout
 import android.widget.TextView
 import android.widget.Toast
 import androidx.activity.viewModels
@@ -17,30 +19,36 @@ import com.google.android.material.textfield.TextInputEditText
 import com.qingfeng.files.R
 import com.qingfeng.files.base.BaseActivity
 import com.qingfeng.files.data.Category
+import com.qingfeng.files.data.Clipboard
 import com.qingfeng.files.data.FileItem
 import com.qingfeng.files.data.Filter
-import com.qingfeng.files.data.SortType
+import com.qingfeng.files.data.SearchScope
+import com.qingfeng.files.data.SortDir
+import com.qingfeng.files.data.SortField
+import com.qingfeng.files.data.SortState
+import com.qingfeng.files.data.ViewMode
 import java.io.File
 
 /**
  * 文件浏览主页面。
- *
- * 借鉴参照物的设计：
- * - 分类是**筛选器**（在当前列表上收窄），不是"扫盘出结果页"
- * - 有排序切换、列表/网格切换
- * - 路径用面包屑分段显示，点一段跳回那一级
  */
 class BrowseActivity : BaseActivity() {
 
     private val viewModel: BrowseViewModel by viewModels()
     private lateinit var adapter: FileAdapter
     private lateinit var recycler: RecyclerView
-    private lateinit var pathBar: android.widget.LinearLayout
+    private lateinit var pathBar: LinearLayout
     private lateinit var emptyText: TextView
+    private lateinit var deepSearchText: TextView
     private lateinit var swipe: SwipeRefreshLayout
     private lateinit var statusText: TextView
+    private lateinit var actionBar: LinearLayout
+    private lateinit var btnPaste: TextView
+    private lateinit var btnSelectAll: TextView
 
-    private var isGrid = false
+    private val checked = HashSet<String>()
+    private var selectionMode = false
+    private var lastKeyword = ""
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
@@ -48,40 +56,52 @@ class BrowseActivity : BaseActivity() {
 
         pathBar = findViewById(R.id.pathBar)
         emptyText = findViewById(R.id.tvEmpty)
+        deepSearchText = findViewById(R.id.tvDeepSearch)
         swipe = findViewById(R.id.swipeRefresh)
         recycler = findViewById(R.id.recycler)
         statusText = findViewById(R.id.tvStatus)
+        actionBar = findViewById(R.id.actionBar)
+        btnPaste = findViewById(R.id.btnPaste)
+        btnSelectAll = findViewById(R.id.btnSelectAll)
 
         adapter = FileAdapter(
             onItemClick = { onItemClick(it) },
-            onItemLongClick = { showItemMenu(it) }
+            onItemLongClick = { enterSelection(it) },
+            onCheckChange = { item, isChecked ->
+                if (isChecked) checked.add(item.path) else checked.remove(item.path)
+                refreshSelectionUi()
+            }
         )
-        applyLayoutManager()
+        recycler.layoutManager = LinearLayoutManager(this)
         recycler.adapter = adapter
 
         swipe.setOnRefreshListener { viewModel.open(viewModel.currentPathValue()) }
 
         findViewById<View>(R.id.btnSort).setOnClickListener { showSortDialog() }
+        findViewById<View>(R.id.btnView).setOnClickListener { showViewDialog() }
         findViewById<View>(R.id.btnFilter).setOnClickListener { showFilterDialog() }
-        findViewById<View>(R.id.btnView).setOnClickListener { toggleViewMode() }
         findViewById<View>(R.id.btnSearch).setOnClickListener { showSearchDialog() }
+        findViewById<View>(R.id.btnNew).setOnClickListener { showNewFolderDialog() }
+        btnSelectAll.setOnClickListener { toggleSelectAll() }
+        btnPaste.setOnClickListener { viewModel.pasteHere() }
+        findViewById<View>(R.id.btnActionCopy).setOnClickListener { putClipboard(Clipboard.Mode.COPY) }
+        findViewById<View>(R.id.btnActionCut).setOnClickListener { putClipboard(Clipboard.Mode.CUT) }
+        findViewById<View>(R.id.btnActionDelete).setOnClickListener { confirmDeleteSelected() }
+        findViewById<View>(R.id.btnActionClose).setOnClickListener { exitSelection() }
+        deepSearchText.setOnClickListener {
+            if (lastKeyword.isNotBlank()) viewModel.searchDeeper(lastKeyword, viewModel.searchScope.value ?: SearchScope.ALL)
+        }
 
         viewModel.items.observe(this) { list ->
-            if (viewModel.isPlainBrowse()) {
-                adapter.submitList(list)
-                emptyText.visibility = if (list.isEmpty()) View.VISIBLE else View.GONE
-                updateStatus(list.size)
-            }
+            if (viewModel.isPlainBrowse()) { adapter.submitList(list); renderState(list) }
             swipe.isRefreshing = false
         }
         viewModel.searchResults.observe(this) { list ->
-            if (list != null) {
-                adapter.submitList(list)
-                emptyText.visibility = if (list.isEmpty()) View.VISIBLE else View.GONE
-                updateStatus(list.size, "搜索结果")
-            }
+            if (list != null) { adapter.submitList(list); renderState(list, "搜索结果") }
         }
         viewModel.currentPath.observe(this) { if (viewModel.isPlainBrowse()) renderBreadcrumb(it) }
+        viewModel.viewMode.observe(this) { applyViewMode(it) }
+        viewModel.clipboard.observe(this) { updatePasteUi(it) }
         viewModel.error.observe(this) { msg ->
             if (!msg.isNullOrEmpty()) Toast.makeText(this, msg, Toast.LENGTH_SHORT).show()
         }
@@ -89,23 +109,22 @@ class BrowseActivity : BaseActivity() {
         viewModel.start()
     }
 
-    private fun updateStatus(count: Int, prefix: String = "共") {
+    private fun renderState(list: List<FileItem>, prefix: String = "共") {
+        emptyText.visibility = if (list.isEmpty()) View.VISIBLE else View.GONE
+        // 借鉴点：搜索无结果时给"深度搜索"引导，而不是死胡同
+        deepSearchText.visibility =
+            if (list.isEmpty() && lastKeyword.isNotBlank()) View.VISIBLE else View.GONE
         val f = viewModel.currentFilter()
-        val suffix = if (f.isEmpty()) "" else "（已筛选）"
-        statusText.text = "$prefix $count 项$suffix"
+        statusText.text = "$prefix ${list.size} 项${if (f.isEmpty()) "" else "（已筛选）"}"
     }
 
-    private fun applyLayoutManager() {
+    private fun applyViewMode(mode: ViewMode) {
+        adapter.viewMode = mode
+        adapter.notifyDataSetChanged()
         recycler.layoutManager =
-            if (isGrid) GridLayoutManager(this, 3) else LinearLayoutManager(this)
+            if (mode.isGrid) GridLayoutManager(this, mode.span) else LinearLayoutManager(this)
     }
 
-    private fun toggleViewMode() {
-        isGrid = !isGrid
-        applyLayoutManager()
-    }
-
-    /** 面包屑：把路径拆成一段段，点一段跳回那一级 */
     private fun renderBreadcrumb(path: String) {
         pathBar.removeAllViews()
         val root = viewModel.rootPathValue()
@@ -113,118 +132,168 @@ class BrowseActivity : BaseActivity() {
         val segs = mutableListOf("根目录")
         if (rel.isNotEmpty()) segs.addAll(rel.split('/'))
         segs.forEachIndexed { i, name ->
-            if (i > 0) {
-                val sep = TextView(this).apply { text = " › " }
-                pathBar.addView(sep)
-            }
-            val tv = TextView(this).apply {
+            if (i > 0) pathBar.addView(TextView(this).apply { text = " › " })
+            pathBar.addView(TextView(this).apply {
                 text = name
                 textSize = 13f
-                setTextColor(resources.getColor(R.color.primary, theme))
-                setOnClickListener {
-                    // 回退到这一级
-                    repeat(segs.size - 1 - i) { viewModel.goUp() }
-                }
-            }
-            pathBar.addView(tv)
+                setOnClickListener { repeat(segs.size - 1 - i) { viewModel.goUp() } }
+            })
         }
     }
 
+    // ---------- 排序面板 ----------
     private fun showSortDialog() {
-        val labels = SortType.values().map { it.label }.toTypedArray()
-        val cur = SortType.values().indexOf(viewModel.currentSort())
+        val cur = viewModel.currentSort()
+        val labels = SortField.values().map { f ->
+            val mark = if (f == cur.field) (if (cur.dir == SortDir.ASC) " ↑" else " ↓") else ""
+            f.label + mark
+        }.toTypedArray() + arrayOf("切换升降序")
         MaterialAlertDialogBuilder(this)
-            .setTitle("排序方式")
-            .setSingleChoiceItems(labels, cur) { d, which ->
-                viewModel.applySort(SortType.values()[which])
+            .setTitle("排序（当前：${cur.label()}）")
+            .setItems(labels) { _, which ->
+                if (which < SortField.values().size) {
+                    val f = SortField.values()[which]
+                    // 点已选中的字段 = 切方向（对应参照物的箭头）
+                    viewModel.applySort(
+                        if (f == cur.field) cur.toggled() else SortState(f, SortDir.ASC)
+                    )
+                } else {
+                    viewModel.applySort(cur.toggled())
+                }
+            }
+            .show()
+    }
+
+    // ---------- 视图面板 ----------
+    private fun showViewDialog() {
+        val labels = ViewMode.values().map { it.label }.toTypedArray()
+        MaterialAlertDialogBuilder(this)
+            .setTitle("视图模式")
+            .setSingleChoiceItems(labels, ViewMode.values().indexOf(adapter.viewMode)) { d, which ->
+                viewModel.setViewMode(ViewMode.values()[which], applyAll = true)
                 d.dismiss()
             }
             .show()
     }
 
+    // ---------- 筛选面板 ----------
     private fun showFilterDialog() {
         val cur = viewModel.currentFilter()
         val catLabels = Category.values().map { it.label }.toTypedArray()
         val catChecked = BooleanArray(catLabels.size) { i -> Category.values()[i] in cur.categories }
-
-        val sizeLabels = arrayOf("不限", "< 1MB", "1–10MB", "10–100MB", "> 100MB")
-        val sizeIdx = when {
-            cur.sizeFrom == null && cur.sizeTo == null -> 0
-            cur.sizeTo != null && cur.sizeTo <= 1_048_576L -> 1
-            cur.sizeFrom == 1_048_576L -> 2
-            cur.sizeFrom == 10_485_760L -> 3
-            else -> 4
-        }
-
-        val timeLabels = arrayOf("不限", "今天", "最近 7 天", "最近 30 天", "更早")
-        val timeIdx = when {
-            cur.timeFrom == null && cur.timeTo == null -> 0
-            cur.timeFrom != null && cur.timeFrom >= todayStart() -> 1
-            cur.timeFrom != null && cur.timeFrom >= daysAgo(7) -> 2
-            cur.timeFrom != null && cur.timeFrom >= daysAgo(30) -> 3
-            else -> 4
-        }
-
-        val hiddenLabels = arrayOf("显示隐藏文件")
         val hiddenChecked = booleanArrayOf(cur.showHidden)
 
         MaterialAlertDialogBuilder(this)
             .setTitle("筛选")
             .setMultiChoiceItems(catLabels, catChecked) { _, w, c -> catChecked[w] = c }
-            .setSingleChoiceItems(sizeLabels, sizeIdx) { _, _ -> }
+            .setMultiChoiceItems(arrayOf("显示隐藏文件"), hiddenChecked) { _, _, c -> hiddenChecked[0] = c }
             .setNegativeButton("取消", null)
-            .setNeutralButton("清除筛选") { _, _ -> viewModel.applyFilter(Filter()) }
+            .setNeutralButton("清除") { _, _ -> viewModel.applyFilter(Filter()) }
             .setPositiveButton("应用") { _, _ ->
                 val cats = Category.values().filterIndexed { i, _ -> catChecked[i] }.toSet()
-                val (sf, st) = sizeRangeOf(indexOfSize(sizeLabels, sizeIdx))
-                val (tf, tt) = timeRangeOf(indexOfTime(timeLabels, timeIdx))
-                viewModel.applyFilter(Filter(cats, sf, st, tf, tt, hiddenChecked[0]))
+                viewModel.applyFilter(cur.copy(categories = cats, showHidden = hiddenChecked[0]))
             }
             .show()
     }
 
-    private fun indexOfSize(labels: Array<String>, idx: Int) = idx
-    private fun indexOfTime(labels: Array<String>, idx: Int) = idx
-
-    private fun sizeRangeOf(i: Int): Pair<Long?, Long?> = when (i) {
-        1 -> 0L to 1_048_576L
-        2 -> 1_048_576L to 10_485_760L
-        3 -> 10_485_760L to 104_857_600L
-        4 -> 104_857_600L to null
-        else -> null to null
-    }
-
-    private fun timeRangeOf(i: Int): Pair<Long?, Long?> = when (i) {
-        1 -> todayStart() to null
-        2 -> daysAgo(7) to null
-        3 -> daysAgo(30) to null
-        4 -> null to daysAgo(30)
-        else -> null to null
-    }
-
-    private fun todayStart(): Long = java.util.Calendar.getInstance().apply {
-        set(java.util.Calendar.HOUR_OF_DAY, 0)
-        set(java.util.Calendar.MINUTE, 0)
-        set(java.util.Calendar.SECOND, 0)
-        set(java.util.Calendar.MILLISECOND, 0)
-    }.timeInMillis
-
-    private fun daysAgo(n: Int): Long = System.currentTimeMillis() - n * 86_400_000L
-
+    // ---------- 搜索（带范围） ----------
     private fun showSearchDialog() {
         val input = TextInputEditText(this).apply { hint = "文件名关键字" }
+        val scopes = SearchScope.values().map { it.label }.toTypedArray()
+        var scope = SearchScope.ALL
         MaterialAlertDialogBuilder(this)
-            .setTitle("在当前目录及子目录中搜索")
+            .setTitle("搜索")
             .setView(input)
+            .setSingleChoiceItems(scopes, 0) { _, w -> scope = SearchScope.values()[w] }
             .setNegativeButton("取消", null)
             .setPositiveButton("搜索") { _, _ ->
                 val kw = input.text?.toString()?.trim()
-                if (!kw.isNullOrEmpty()) viewModel.search(kw)
+                if (!kw.isNullOrEmpty()) {
+                    lastKeyword = kw
+                    viewModel.search(kw, scope)
+                }
             }
             .show()
     }
 
+    private fun showNewFolderDialog() {
+        val input = TextInputEditText(this).apply { hint = "文件夹名称" }
+        MaterialAlertDialogBuilder(this)
+            .setTitle("新建文件夹")
+            .setView(input)
+            .setNegativeButton("取消", null)
+            .setPositiveButton("创建") { _, _ ->
+                val n = input.text?.toString()?.trim()
+                if (!n.isNullOrEmpty()) viewModel.mkdir(n)
+            }
+            .show()
+    }
+
+    // ---------- 多选 ----------
+    private fun enterSelection(item: FileItem) {
+        selectionMode = true
+        checked.clear()
+        checked.add(item.path)
+        adapter.selectionMode = true
+        adapter.setChecked(checked)
+        refreshSelectionUi()
+    }
+
+    private fun exitSelection() {
+        selectionMode = false
+        checked.clear()
+        adapter.selectionMode = false
+        adapter.setChecked(emptySet())
+        refreshSelectionUi()
+    }
+
+    private fun toggleSelectAll() {
+        val all = adapter.currentList.toList()
+        if (checked.size >= all.size) checked.clear() else checked.addAll(all.map { it.path })
+        adapter.setChecked(checked)
+        refreshSelectionUi()
+    }
+
+    private fun refreshSelectionUi() {
+        actionBar.visibility = if (selectionMode) View.VISIBLE else View.GONE
+        btnPaste.visibility = if (viewModel.clipboard.value != null) View.VISIBLE else View.GONE
+        if (selectionMode) statusText.text = "已选 ${checked.size} 项"
+        btnSelectAll.text = if (checked.isNotEmpty()) "取消全选" else "全选"
+    }
+
+    private fun putClipboard(mode: Clipboard.Mode) {
+        val items = adapter.currentList.filter { it.path in checked }
+        if (items.isEmpty()) { Toast.makeText(this, "没有选中文件", Toast.LENGTH_SHORT).show(); return }
+        viewModel.putClipboard(items, mode)
+        exitSelection()
+        Toast.makeText(this, "已${mode.label} ${items.size} 项，去目标目录点「粘贴」", Toast.LENGTH_LONG).show()
+    }
+
+    private fun updatePasteUi(cb: Clipboard?) {
+        btnPaste.visibility = if (cb != null) View.VISIBLE else View.GONE
+        if (cb != null) btnPaste.text = "粘贴 ${cb.items.size} 项"
+    }
+
+    private fun confirmDeleteSelected() {
+        val items = adapter.currentList.filter { it.path in checked }
+        if (items.isEmpty()) return
+        MaterialAlertDialogBuilder(this)
+            .setTitle("删除 ${items.size} 项")
+            .setMessage("确定删除选中的内容？")
+            .setNegativeButton("取消", null)
+            .setPositiveButton("删除") { _, _ ->
+                items.forEach { viewModel.delete(it) }
+                exitSelection()
+            }
+            .show()
+    }
+
+    // ---------- 打开 ----------
     private fun onItemClick(item: FileItem) {
+        if (selectionMode) {
+            if (item.path in checked) checked.remove(item.path) else checked.add(item.path)
+            adapter.setChecked(checked); refreshSelectionUi(); return
+        }
         if (item.isDirectory) viewModel.enterDirectory(item) else openFile(item)
     }
 
@@ -242,66 +311,13 @@ class BrowseActivity : BaseActivity() {
         }
     }
 
-    private fun showItemMenu(item: FileItem) {
-        val options = arrayOf("删除", "重命名", "复制到…", "移动到…")
-        MaterialAlertDialogBuilder(this)
-            .setTitle(item.name)
-            .setItems(options) { _, which ->
-                when (which) {
-                    0 -> confirmDelete(item)
-                    1 -> showRenameDialog(item)
-                    2 -> pickTargetDir(item, move = false)
-                    3 -> pickTargetDir(item, move = true)
-                }
-            }
-            .show()
-    }
-
-    private fun pickTargetDir(item: FileItem, move: Boolean) {
-        val base = File(viewModel.currentPathValue())
-        val dirs = mutableListOf("..（上一级）").apply {
-            addAll(base.listFiles()?.filter { it.isDirectory }?.map { it.name } ?: emptyList())
-        }
-        if (dirs.size <= 1) {
-            Toast.makeText(this, "当前目录下没有子文件夹", Toast.LENGTH_SHORT).show()
-            return
-        }
-        MaterialAlertDialogBuilder(this)
-            .setTitle(if (move) "移动到" else "复制到")
-            .setItems(dirs.toTypedArray()) { _, i ->
-                val target = if (i == 0) base.parentFile?.absolutePath else File(base, dirs[i]).absolutePath
-                if (target != null) {
-                    if (move) viewModel.moveTo(item, target) else viewModel.copyTo(item, target)
-                }
-            }
-            .show()
-    }
-
-    private fun confirmDelete(item: FileItem) {
-        MaterialAlertDialogBuilder(this)
-            .setTitle("删除")
-            .setMessage("确定删除「${item.name}」？${if (item.isDirectory) "文件夹内所有内容也会被删除。" else ""}")
-            .setNegativeButton("取消", null)
-            .setPositiveButton("删除") { _, _ -> viewModel.delete(item) }
-            .show()
-    }
-
-    private fun showRenameDialog(item: FileItem) {
-        val input = TextInputEditText(this).apply { setText(item.name) }
-        MaterialAlertDialogBuilder(this)
-            .setTitle("重命名")
-            .setView(input)
-            .setNegativeButton("取消", null)
-            .setPositiveButton("确定") { _, _ ->
-                val newName = input.text?.toString()?.trim()
-                if (!newName.isNullOrEmpty()) viewModel.rename(item, newName)
-            }
-            .show()
-    }
-
     override fun onBackPressed() {
+        if (selectionMode) { exitSelection(); return }
         if (viewModel.searchResults.value != null) {
-            viewModel.clearSearch(); viewModel.open(viewModel.currentPathValue()); return
+            lastKeyword = ""
+            viewModel.clearSearch()
+            viewModel.open(viewModel.currentPathValue())
+            return
         }
         if (!viewModel.goUp()) super.onBackPressed()
     }
