@@ -14,3 +14,21 @@ enum class Category(val label: String, val exts: Set<String>) {
 
 fun FileItem.category(): Category? =
     if (isDirectory) null else Category.values().firstOrNull { extension in it.exts }
+
+
+/**
+ * 搜索范围。
+ *
+ * 借鉴点：参照物的搜索溢出菜单有 6 项类型范围 ——
+ * Search in App / Document / Music / Image / Video + Advanced search。
+ * 不是只有"输个关键字"。
+ */
+enum class SearchScope(val label: String, val exts: Set<String>?) {
+    ALL("全部文件", null),
+    IMAGE("图片", Category.IMAGE.exts),
+    VIDEO("视频", Category.VIDEO.exts),
+    AUDIO("音乐", Category.AUDIO.exts),
+    DOC("文档", Category.DOC.exts),
+    ARCHIVE("压缩包", Category.ARCHIVE.exts),
+    APK("安装包", Category.APK.exts)
+}
