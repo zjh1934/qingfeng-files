@@ -33,6 +33,11 @@ interface FileSource {
      * 搜索：在 base 下递归找名字含 keyword 的项。
      * limit 控制返回条数，避免大目录卡死。
      */
-    suspend fun search(base: String, keyword: String, limit: Int = 200): List<FileItem>
+    suspend fun search(
+        base: String,
+        keyword: String,
+        scope: SearchScope = SearchScope.ALL,
+        limit: Int = 200
+    ): List<FileItem>
 
 }
