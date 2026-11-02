@@ -138,7 +138,8 @@ class LocalFileSource : FileSource {
             val dest = File(destDir, src.name)
             if (dest.exists()) throw FileError.Unknown("目标已存在同名文件")
             src.renameTo(dest)
-            cb?.onProgress(++i.toLong(), items.size.toLong())
+            i++
+            cb?.onProgress(i.toLong(), items.size.toLong())
         }
         return true
     }
