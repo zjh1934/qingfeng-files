@@ -23,12 +23,12 @@ import com.qingfeng.files.util.FileFormat
 class FileAdapter(
     private val onItemClick: (FileItem) -> Unit,
     private val onItemLongClick: (FileItem) -> Unit,
-    private val onCheckChange: (FileItem, Boolean) -> Unit
+    private val onCheckChange: (FileItem, Boolean) -> Unit,
+    private val onMoreClick: ((FileItem) -> Unit)? = null
 ) : ListAdapter<FileItem, FileAdapter.Holder>(Diff) {
 
     var viewMode: ViewMode = ViewMode.GRID_MEDIUM
     var selectionMode: Boolean = false
-    var onMoreClick: ((FileItem) -> Unit)? = null
     private val checked = HashSet<String>()
 
     fun setChecked(paths: Set<String>) {
