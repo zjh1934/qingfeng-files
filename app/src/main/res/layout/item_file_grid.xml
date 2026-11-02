@@ -1,11 +1,12 @@
 <?xml version="1.0" encoding="utf-8"?>
+<!-- 网格模式 item（参照 fl/fs/ft.xml：图标 + 名称 + 复选框，简洁） -->
 <LinearLayout xmlns:android="http://schemas.android.com/apk/res/android"
     android:layout_width="match_parent"
     android:layout_height="wrap_content"
     android:orientation="vertical"
     android:gravity="center_horizontal"
-    android:padding="6dp"
-    android:background="?android:attr/selectableItemBackground">
+    android:background="?android:attr/selectableItemBackground"
+    android:padding="8dp">
 
     <CheckBox
         android:id="@+id/cbSelect"
@@ -17,9 +18,9 @@
     <TextView
         android:id="@+id/tvIcon"
         android:layout_width="match_parent"
-        android:layout_height="48dp"
+        android:layout_height="56dp"
         android:gravity="center"
-        android:textSize="32sp" />
+        android:textSize="34sp" />
 
     <TextView
         android:id="@+id/tvName"
@@ -29,7 +30,7 @@
         android:ellipsize="end"
         android:gravity="center_horizontal"
         android:maxLines="2"
-        android:textColor="?android:attr/textColorPrimary"
+        android:textColor="@color/text_primary"
         android:textSize="12sp" />
 
     <TextView
@@ -39,6 +40,6 @@
         android:ellipsize="end"
         android:gravity="center_horizontal"
         android:singleLine="true"
-        android:textColor="?android:attr/textColorSecondary"
+        android:textColor="@color/text_tertiary"
         android:textSize="10sp" />
 </LinearLayout>
