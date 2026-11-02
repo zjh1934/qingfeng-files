@@ -1,51 +1,76 @@
 <?xml version="1.0" encoding="utf-8"?>
+<!-- 列表模式 item（参照 fp/fq/fr.xml：图标 + 名称 + 路径 + 更多按钮 + 分隔线） -->
 <LinearLayout xmlns:android="http://schemas.android.com/apk/res/android"
     android:layout_width="match_parent"
-    android:layout_height="64dp"
-    android:orientation="horizontal"
-    android:gravity="center_vertical"
-    android:paddingStart="16dp"
-    android:paddingEnd="16dp"
-    android:background="?android:attr/selectableItemBackground">
-
-    <TextView
-        android:id="@+id/tvIcon"
-        android:layout_width="32dp"
-        android:layout_height="32dp"
-        android:gravity="center"
-        android:textSize="22sp" />
-
-    <CheckBox
-        android:id="@+id/cbSelect"
-        android:layout_width="wrap_content"
-        android:layout_height="wrap_content"
-        android:layout_marginEnd="6dp"
-        android:visibility="gone" />
+    android:layout_height="wrap_content"
+    android:orientation="vertical">
 
     <LinearLayout
-        android:layout_width="0dp"
+        android:layout_width="match_parent"
         android:layout_height="wrap_content"
-        android:layout_weight="1"
-        android:layout_marginStart="12dp"
-        android:orientation="vertical">
+        android:orientation="horizontal"
+        android:gravity="center_vertical"
+        android:background="?android:attr/selectableItemBackground"
+        android:paddingStart="12dp"
+        android:paddingEnd="8dp"
+        android:paddingTop="10dp"
+        android:paddingBottom="10dp">
+
+        <CheckBox
+            android:id="@+id/cbSelect"
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:layout_marginEnd="8dp"
+            android:visibility="gone" />
 
         <TextView
-            android:id="@+id/tvName"
-            android:layout_width="match_parent"
+            android:id="@+id/tvIcon"
+            android:layout_width="40dp"
+            android:layout_height="40dp"
+            android:gravity="center"
+            android:textSize="24sp" />
+
+        <LinearLayout
+            android:layout_width="0dp"
             android:layout_height="wrap_content"
-            android:ellipsize="middle"
-            android:singleLine="true"
-            android:textColor="?android:attr/textColorPrimary"
-            android:textSize="15sp" />
+            android:layout_weight="1"
+            android:layout_marginStart="10dp"
+            android:orientation="vertical">
+
+            <TextView
+                android:id="@+id/tvName"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:ellipsize="end"
+                android:singleLine="true"
+                android:textColor="@color/text_primary"
+                android:textSize="15sp" />
+
+            <TextView
+                android:id="@+id/tvMeta"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:layout_marginTop="2dp"
+                android:ellipsize="end"
+                android:singleLine="true"
+                android:textColor="@color/text_tertiary"
+                android:textSize="12sp" />
+        </LinearLayout>
 
         <TextView
-            android:id="@+id/tvMeta"
-            android:layout_width="match_parent"
-            android:layout_height="wrap_content"
-            android:layout_marginTop="2dp"
-            android:ellipsize="end"
-            android:singleLine="true"
-            android:textColor="?android:attr/textColorSecondary"
-            android:textSize="12sp" />
+            android:id="@+id/btnMore"
+            android:layout_width="36dp"
+            android:layout_height="36dp"
+            android:gravity="center"
+            android:text="⋮"
+            android:textColor="@color/text_hint"
+            android:textSize="18sp"
+            android:background="?android:attr/selectableItemBackgroundBorderless" />
     </LinearLayout>
+
+    <View
+        android:layout_width="match_parent"
+        android:layout_height="1dp"
+        android:layout_marginStart="58dp"
+        android:background="@color/divider" />
 </LinearLayout>
