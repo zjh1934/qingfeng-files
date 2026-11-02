@@ -13,7 +13,7 @@ import com.qingfeng.files.data.FilePrefs
 import com.qingfeng.files.data.FileSource
 import com.qingfeng.files.data.Filter
 import com.qingfeng.files.data.ProgressCallback
-import com.qingfeng.files.data.LocalFileSource
+import com.qingfeng.files.data.FileSources
 import com.qingfeng.files.data.SearchScope
 import com.qingfeng.files.data.SortState
 import com.qingfeng.files.data.ViewMode
