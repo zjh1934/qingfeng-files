@@ -1,93 +1,149 @@
 <?xml version="1.0" encoding="utf-8"?>
+<!--
+  模仿参照物主界面结构（参照 res/layout/kb.xml / f3.xml 实测）：
+  tool_top（顶部工具栏：上一级 / 存储 / 书签 / 排序 / 搜索）
+  → 路径面包屑
+  → 内容区（RecyclerView + 快速滚动）
+  → tools_bottom_container（底部工具栏：新建 / 粘贴 / 多选操作）
+-->
 <LinearLayout xmlns:android="http://schemas.android.com/apk/res/android"
     android:layout_width="match_parent"
     android:layout_height="match_parent"
     android:orientation="vertical">
 
+    <!-- ===== tool_top：顶部工具栏（图标式，参照 f3.xml） ===== -->
+    <LinearLayout
+        android:layout_width="match_parent"
+        android:layout_height="48dp"
+        android:orientation="horizontal"
+        android:gravity="center_vertical"
+        android:background="@color/surface"
+        android:paddingStart="6dp"
+        android:paddingEnd="6dp">
+
+        <TextView
+            android:id="@+id/btnUp"
+            style="@style/QfToolIcon"
+            android:text="↑"
+            android:contentDescription="上一级" />
+
+        <TextView
+            android:id="@+id/btnDevice"
+            style="@style/QfToolIcon"
+            android:text="▤"
+            android:contentDescription="存储" />
+
+        <TextView
+            android:id="@+id/btnBookmark"
+            style="@style/QfToolIcon"
+            android:text="★"
+            android:contentDescription="书签" />
+
+        <View
+            android:layout_width="0dp"
+            android:layout_height="1dp"
+            android:layout_weight="1" />
+
+        <!-- 隐藏文件开关（参照物面板自带 CheckBox） -->
+        <TextView
+            android:id="@+id/btnHidden"
+            style="@style/QfToolIcon"
+            android:text="◌" />
+
+        <TextView
+            android:id="@+id/btnSort"
+            style="@style/QfToolIcon"
+            android:text="⇅"
+            android:contentDescription="排序与视图" />
+
+        <TextView
+            android:id="@+id/btnSearch"
+            style="@style/QfToolIcon"
+            android:text="⌕"
+            android:contentDescription="搜索" />
+    </LinearLayout>
+
+    <View
+        android:layout_width="match_parent"
+        android:layout_height="1dp"
+        android:background="@color/divider" />
+
+    <!-- ===== 路径面包屑（参照 PathIndicatorView，横向可点） ===== -->
     <HorizontalScrollView
         android:layout_width="match_parent"
-        android:layout_height="wrap_content"
-        android:paddingStart="14dp"
-        android:paddingTop="10dp"
-        android:paddingEnd="14dp"
+        android:layout_height="40dp"
+        android:background="@color/surface"
+        android:paddingStart="12dp"
+        android:paddingEnd="12dp"
         android:scrollbars="none">
 
         <LinearLayout
             android:id="@+id/pathBar"
             android:layout_width="wrap_content"
-            android:layout_height="wrap_content"
+            android:layout_height="match_parent"
+            android:gravity="center_vertical"
             android:orientation="horizontal" />
     </HorizontalScrollView>
 
-    <LinearLayout
-        android:layout_width="match_parent"
-        android:layout_height="wrap_content"
-        android:orientation="horizontal"
-        android:paddingStart="10dp"
-        android:paddingEnd="10dp"
-        android:paddingBottom="4dp">
-
-        <TextView android:id="@+id/btnSort"
-            style="@style/QfBarButton" android:text="排序" />
-        <TextView android:id="@+id/btnView"
-            style="@style/QfBarButton" android:text="视图" />
-        <TextView android:id="@+id/btnFilter"
-            style="@style/QfBarButton" android:text="筛选" />
-        <TextView android:id="@+id/btnNew"
-            style="@style/QfBarButton" android:text="新建" />
-        <TextView android:id="@+id/btnHidden"
-            style="@style/QfBarButton" android:text="隐藏" />
-        <View android:layout_width="0dp" android:layout_height="1dp" android:layout_weight="1" />
-        <TextView android:id="@+id/btnPaste"
-            style="@style/QfBarButton" android:text="粘贴" android:visibility="gone" />
-        <TextView android:id="@+id/btnSearch"
-            style="@style/QfBarButton" android:text="搜索" />
-    </LinearLayout>
-
-    <!-- 多选操作栏：参照物的 action_mode_bar，固定栏 + 按钮按状态显隐 -->
+    <!-- ===== 多选操作栏（参照 action_mode_bar / hn.xml） ===== -->
     <LinearLayout
         android:id="@+id/actionBar"
         android:layout_width="match_parent"
-        android:layout_height="wrap_content"
+        android:layout_height="48dp"
         android:orientation="horizontal"
+        android:gravity="center_vertical"
         android:visibility="gone"
-        android:background="?android:attr/colorBackground"
-        android:paddingStart="10dp"
-        android:paddingEnd="10dp"
-        android:paddingTop="6dp"
-        android:paddingBottom="6dp">
+        android:background="@color/primary"
+        android:paddingStart="6dp"
+        android:paddingEnd="6dp">
 
-        <TextView android:id="@+id/btnSelectAll"
-            style="@style/QfBarButton" android:text="全选" />
-        <TextView android:id="@+id/btnActionCopy"
-            style="@style/QfBarButton" android:text="复制" />
-        <TextView android:id="@+id/btnActionCut"
-            style="@style/QfBarButton" android:text="剪切" />
-        <TextView android:id="@+id/btnActionDelete"
-            style="@style/QfBarButton" android:text="删除" />
-        <View android:layout_width="0dp" android:layout_height="1dp" android:layout_weight="1" />
-        <TextView android:id="@+id/btnActionClose"
-            style="@style/QfBarButton" android:text="取消" />
+        <TextView
+            android:id="@+id/btnSelectAll"
+            style="@style/QfActionButton"
+            android:text="全选" />
+        <TextView
+            android:id="@+id/btnActionCopy"
+            style="@style/QfActionButton"
+            android:text="复制" />
+        <TextView
+            android:id="@+id/btnActionCut"
+            style="@style/QfActionButton"
+            android:text="剪切" />
+        <TextView
+            android:id="@+id/btnActionDelete"
+            style="@style/QfActionButton"
+            android:text="删除" />
+        <View
+            android:layout_width="0dp"
+            android:layout_height="1dp"
+            android:layout_weight="1" />
+        <TextView
+            android:id="@+id/btnActionClose"
+            style="@style/QfActionButton"
+            android:text="取消" />
     </LinearLayout>
 
+    <!-- ===== 状态行 ===== -->
     <TextView
         android:id="@+id/tvStatus"
         android:layout_width="match_parent"
         android:layout_height="wrap_content"
-        android:paddingStart="16dp"
-        android:paddingEnd="16dp"
-        android:paddingBottom="4dp"
-        android:textColor="?android:attr/textColorSecondary"
+        android:paddingStart="14dp"
+        android:paddingEnd="14dp"
+        android:paddingTop="6dp"
+        android:paddingBottom="6dp"
+        android:textColor="@color/text_tertiary"
         android:textSize="12sp" />
 
+    <!-- ===== 复制进度（可取消） ===== -->
     <LinearLayout
         android:id="@+id/progressRow"
         android:layout_width="match_parent"
         android:layout_height="wrap_content"
         android:orientation="horizontal"
         android:visibility="gone"
-        android:paddingStart="16dp"
-        android:paddingEnd="16dp"
+        android:paddingStart="14dp"
+        android:paddingEnd="14dp"
         android:paddingBottom="6dp">
 
         <ProgressBar
@@ -105,6 +161,7 @@
             android:visibility="gone" />
     </LinearLayout>
 
+    <!-- ===== 内容区 ===== -->
     <androidx.swiperefreshlayout.widget.SwipeRefreshLayout
         android:id="@+id/swipeRefresh"
         android:layout_width="match_parent"
@@ -119,6 +176,8 @@
                 android:id="@+id/recycler"
                 android:layout_width="match_parent"
                 android:layout_height="match_parent"
+                android:clipToPadding="false"
+                android:paddingBottom="8dp"
                 android:scrollbars="none" />
 
             <com.qingfeng.files.ui.browse.FastScroller
@@ -131,29 +190,65 @@
                 android:layout_width="wrap_content"
                 android:layout_height="wrap_content"
                 android:layout_gravity="center"
-                android:orientation="vertical"
-                android:gravity="center_horizontal">
+                android:gravity="center_horizontal"
+                android:orientation="vertical">
 
                 <TextView
                     android:id="@+id/tvEmpty"
                     android:layout_width="wrap_content"
                     android:layout_height="wrap_content"
                     android:text="没有符合条件的文件"
-                    android:textColor="?android:attr/textColorSecondary"
+                    android:textColor="@color/text_hint"
                     android:textSize="14sp"
                     android:visibility="gone" />
 
-                <!-- 借鉴：搜索无结果时给"深度搜索"引导，而不是死胡同 -->
                 <TextView
                     android:id="@+id/tvDeepSearch"
                     android:layout_width="wrap_content"
                     android:layout_height="wrap_content"
                     android:layout_marginTop="10dp"
                     android:text="没找到？试试深度搜索"
-                    android:textColor="@color/primary"
+                    android:textColor="@color/accent"
                     android:textSize="14sp"
                     android:visibility="gone" />
             </LinearLayout>
         </FrameLayout>
     </androidx.swiperefreshlayout.widget.SwipeRefreshLayout>
+
+    <!-- ===== tools_bottom_container：底部工具栏 ===== -->
+    <LinearLayout
+        android:layout_width="match_parent"
+        android:layout_height="48dp"
+        android:orientation="horizontal"
+        android:gravity="center_vertical"
+        android:background="@color/surface"
+        android:paddingStart="6dp"
+        android:paddingEnd="6dp">
+
+        <TextView
+            android:id="@+id/btnNew"
+            style="@style/QfBarButton"
+            android:text="新建文件夹" />
+
+        <View
+            android:layout_width="0dp"
+            android:layout_height="1dp"
+            android:layout_weight="1" />
+
+        <TextView
+            android:id="@+id/btnPaste"
+            style="@style/QfBarButton"
+            android:text="粘贴"
+            android:visibility="gone" />
+
+        <TextView
+            android:id="@+id/btnView"
+            style="@style/QfBarButton"
+            android:text="视图" />
+
+        <TextView
+            android:id="@+id/btnFilter"
+            style="@style/QfBarButton"
+            android:text="筛选" />
+    </LinearLayout>
 </LinearLayout>
