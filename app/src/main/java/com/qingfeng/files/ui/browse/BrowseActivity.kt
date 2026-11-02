@@ -44,6 +44,8 @@ class BrowseActivity : BaseActivity() {
     private lateinit var statusText: TextView
     private lateinit var actionBar: LinearLayout
     private lateinit var btnPaste: TextView
+    private lateinit var progressBar: android.widget.ProgressBar
+    private lateinit var btnCancel: TextView
     private lateinit var btnSelectAll: TextView
 
     private val checked = HashSet<String>()
@@ -63,6 +65,8 @@ class BrowseActivity : BaseActivity() {
         actionBar = findViewById(R.id.actionBar)
         btnPaste = findViewById(R.id.btnPaste)
         btnSelectAll = findViewById(R.id.btnSelectAll)
+        progressBar = findViewById(R.id.progressBar)
+        btnCancel = findViewById(R.id.btnCancel)
 
         adapter = FileAdapter(
             onItemClick = { onItemClick(it) },
@@ -88,6 +92,18 @@ class BrowseActivity : BaseActivity() {
         findViewById<View>(R.id.btnActionCut).setOnClickListener { putClipboard(Clipboard.Mode.CUT) }
         findViewById<View>(R.id.btnActionDelete).setOnClickListener { confirmDeleteSelected() }
         findViewById<View>(R.id.btnActionClose).setOnClickListener { exitSelection() }
+        btnCancel.setOnClickListener { viewModel.cancelPaste() }
+        viewModel.progress.observe(this) { pr ->
+            if (pr == null) {
+                progressBar.visibility = View.GONE
+                btnCancel.visibility = View.GONE
+            } else {
+                progressBar.visibility = View.VISIBLE
+                btnCancel.visibility = View.VISIBLE
+                val (done, total) = pr
+                progressBar.progress = (done * 100 / total.coerceAtLeast(1)).toInt().coerceIn(0, 100)
+            }
+        }
         deepSearchText.setOnClickListener {
             if (lastKeyword.isNotBlank()) viewModel.searchDeeper(lastKeyword, viewModel.searchScope.value ?: SearchScope.ALL)
         }
