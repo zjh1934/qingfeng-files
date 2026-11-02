@@ -28,6 +28,7 @@ class FileAdapter(
 
     var viewMode: ViewMode = ViewMode.GRID_MEDIUM
     var selectionMode: Boolean = false
+    var onMoreClick: ((FileItem) -> Unit)? = null
     private val checked = HashSet<String>()
 
     fun setChecked(paths: Set<String>) {
@@ -49,6 +50,7 @@ class FileAdapter(
         val name: TextView = view.findViewById(R.id.tvName)
         val meta: TextView = view.findViewById(R.id.tvMeta)
         val check: CheckBox = view.findViewById(R.id.cbSelect)
+        val more: TextView? = view.findViewById(R.id.btnMore)
     }
 
     override fun getItemViewType(position: Int): Int =
@@ -65,11 +67,13 @@ class FileAdapter(
         holder.icon.text = FileFormat.icon(item)
         holder.name.text = item.name
         holder.meta.text = "${FileFormat.size(item)}   ${FileFormat.time(item)}".trim()
+        holder.meta.visibility = if (viewMode.isGrid) View.GONE else View.VISIBLE
         holder.check.visibility = if (selectionMode) View.VISIBLE else View.GONE
         holder.check.setOnCheckedChangeListener(null)
         holder.check.isChecked = item.path in checked
         holder.check.setOnCheckedChangeListener { _, isChecked -> onCheckChange(item, isChecked) }
         holder.itemView.setOnClickListener { onItemClick(item) }
         holder.itemView.setOnLongClickListener { onItemLongClick(item); true }
+        holder.more?.setOnClickListener { onMoreClick?.invoke(item) }
     }
 }
