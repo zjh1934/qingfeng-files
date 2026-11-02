@@ -72,6 +72,9 @@ class BrowseViewModel(app: Application) : AndroidViewModel(app) {
     private val _cancel = MutableLiveData<Boolean>()
     val cancel: LiveData<Boolean> = _cancel
 
+    private val _hiddenOn = MutableLiveData<Boolean>(false)
+    val hiddenOn: LiveData<Boolean> = _hiddenOn
+
     private val _searchScope = MutableLiveData<SearchScope>()
     val searchScope: LiveData<SearchScope> = _searchScope
 
@@ -185,9 +188,6 @@ class BrowseViewModel(app: Application) : AndroidViewModel(app) {
     fun cancelPaste() { _cancel.value = true }
 
     // ---------- 显示隐藏文件（提到主面板，参照物面板自带 CheckBox） ----------
-    private val _hiddenOn = MutableLiveData<Boolean>(false)
-    val hiddenOn: LiveData<Boolean> = _hiddenOn
-
     fun toggleHidden(): Boolean {
         val next = !(filter.showHidden)
         filter = filter.copy(showHidden = next)
