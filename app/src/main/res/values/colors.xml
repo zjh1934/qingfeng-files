@@ -1,6 +1,24 @@
 <?xml version="1.0" encoding="utf-8"?>
+<!--
+  配色取自参照物（EX 文件浏览器）反编译实测：
+  - 主色 m4 = #ff1f6aff      → 蓝色
+  - accent ad = #ff0582f4    → 亮蓝（也是它链接文字用的色）
+  - 窗口背景 bn = #fff0f3f6  → 浅灰蓝
+  - 导航栏 nj = #fffbfbfb    → 近白
+  - 文字次色 n3 = #ff333333
+  - 第三级 nl = #ff666666
+-->
 <resources>
-    <color name="primary">#2E7D5B</color>
-    <color name="primary_dark">#1F5A41</color>
-    <color name="accent">#4CAF7D</color>
+    <color name="primary">#FF1F6AFF</color>
+    <color name="primary_dark">#FF0D4FD1</color>
+    <color name="accent">#FF0582F4</color>
+
+    <color name="window_bg">#FFF0F3F6</color>
+    <color name="surface">#FFFBfbfb</color>
+    <color name="divider">#FFE3E8EE</color>
+
+    <color name="text_primary">#FF212121</color>
+    <color name="text_secondary">#FF333333</color>
+    <color name="text_tertiary">#FF666666</color>
+    <color name="text_hint">#FF999999</color>
 </resources>
