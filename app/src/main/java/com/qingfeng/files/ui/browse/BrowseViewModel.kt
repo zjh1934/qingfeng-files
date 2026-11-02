@@ -78,6 +78,7 @@ class BrowseViewModel(app: Application) : AndroidViewModel(app) {
     init {
         _searchScope.value = SearchScope.ALL
         filter = filter.copy(showHidden = prefs.showHidden)
+        _hiddenOn.value = prefs.showHidden
     }
 
     fun start() {
@@ -182,6 +183,19 @@ class BrowseViewModel(app: Application) : AndroidViewModel(app) {
     }
 
     fun cancelPaste() { _cancel.value = true }
+
+    // ---------- 显示隐藏文件（提到主面板，参照物面板自带 CheckBox） ----------
+    private val _hiddenOn = MutableLiveData<Boolean>()
+    val hiddenOn: LiveData<Boolean> = _hiddenOn
+
+    fun toggleHidden(): Boolean {
+        val next = !(filter.showHidden)
+        filter = filter.copy(showHidden = next)
+        prefs.showHidden = next
+        _hiddenOn.value = next
+        publish()
+        return next
+    }
 
     // ---------- 单文件操作（长按菜单，保留） ----------
     fun delete(item: FileItem) {
