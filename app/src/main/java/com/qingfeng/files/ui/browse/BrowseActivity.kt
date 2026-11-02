@@ -652,6 +652,13 @@ class BrowseActivity : BaseActivity() {
     }
 
     private fun openFile(item: FileItem, mimeOverride: String? = null) {
+        // APK 走我们自己的详情页（参照物 `c9`="View Apk content"）
+        if (item.extension.equals("apk", ignoreCase = true)) {
+            startActivity(Intent(this, ApkDetailActivity::class.java).apply {
+                putExtra(ApkDetailActivity.EXTRA_PATH, item.path)
+            })
+            return
+        }
         try {
             val file = File(item.path)
             val uri: Uri = FileProvider.getUriForFile(this, "${packageName}.fileprovider", file)
