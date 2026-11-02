@@ -27,6 +27,7 @@ import com.qingfeng.files.data.SortDir
 import com.qingfeng.files.data.SortField
 import com.qingfeng.files.data.SortState
 import com.qingfeng.files.data.ViewMode
+import com.qingfeng.files.util.FileFormat
 import java.io.File
 
 /**
@@ -65,12 +66,13 @@ class BrowseActivity : BaseActivity() {
         actionBar = findViewById(R.id.actionBar)
         btnPaste = findViewById(R.id.btnPaste)
         btnSelectAll = findViewById(R.id.btnSelectAll)
+        findViewById<FastScroller>(R.id.fastScroller).recyclerView = recycler
         progressBar = findViewById(R.id.progressBar)
         btnCancel = findViewById(R.id.btnCancel)
 
         adapter = FileAdapter(
             onItemClick = { onItemClick(it) },
-            onItemLongClick = { enterSelection(it) },
+            onItemLongClick = { showFileMenu(it) },
             onCheckChange = { item, isChecked ->
                 if (isChecked) checked.add(item.path) else checked.remove(item.path)
                 refreshSelectionUi()
@@ -86,6 +88,12 @@ class BrowseActivity : BaseActivity() {
         findViewById<View>(R.id.btnFilter).setOnClickListener { showFilterDialog() }
         findViewById<View>(R.id.btnSearch).setOnClickListener { showSearchDialog() }
         findViewById<View>(R.id.btnNew).setOnClickListener { showNewFolderDialog() }
+        val btnHidden = findViewById<TextView>(R.id.btnHidden)
+        btnHidden.setOnClickListener {
+            val on = viewModel.toggleHidden()
+            btnHidden.text = if (on) "隐藏✓" else "隐藏"
+        }
+        viewModel.hiddenOn.observe(this) { btnHidden.text = if (it) "隐藏✓" else "隐藏" }
         btnSelectAll.setOnClickListener { toggleSelectAll() }
         btnPaste.setOnClickListener { viewModel.pasteHere() }
         findViewById<View>(R.id.btnActionCopy).setOnClickListener { putClipboard(Clipboard.Mode.COPY) }
@@ -246,6 +254,100 @@ class BrowseActivity : BaseActivity() {
     }
 
     // ---------- 多选 ----------
+    /** 单文件长按 → 操作菜单（参照物：Open/Copy/Cut/Rename/Delete/Share/Properties...） */
+    private fun showFileMenu(item: FileItem) {
+        val opts = mutableListOf("打开", "打开为…", "复制", "剪切", "重命名", "分享", "属性", "多选", "删除")
+        MaterialAlertDialogBuilder(this)
+            .setTitle(item.name)
+            .setItems(opts.toTypedArray()) { _, which ->
+                when (which) {
+                    0 -> openFile(item)
+                    1 -> openFileAs(item)
+                    2 -> { viewModel.putClipboard(listOf(item), Clipboard.Mode.COPY); hintCopied(1, Clipboard.Mode.COPY) }
+                    3 -> { viewModel.putClipboard(listOf(item), Clipboard.Mode.CUT); hintCopied(1, Clipboard.Mode.CUT) }
+                    4 -> showRenameDialog(item)
+                    5 -> shareFile(item)
+                    6 -> showProperties(item)
+                    7 -> { enterSelection(item); }
+                    8 -> confirmDeleteOne(item)
+                }
+            }
+            .show()
+    }
+
+    /** 打开为：指定 MIME 类型打开（参照物 "Open As"） */
+    private fun openFileAs(item: FileItem) {
+        val types = arrayOf("文本", "图片", "视频", "音频", "其他（任意类型）")
+        val mimes = arrayOf("text/plain", "image/*", "video/*", "audio/*", "*/*")
+        MaterialAlertDialogBuilder(this)
+            .setTitle("打开为")
+            .setItems(types) { _, i -> openFile(item, mimes[i]) }
+            .show()
+    }
+
+    private fun shareFile(item: FileItem) {
+        try {
+            val file = java.io.File(item.path)
+            val uri = FileProvider.getUriForFile(this, "${packageName}.fileprovider", file)
+            val intent = Intent(Intent.ACTION_SEND).apply {
+                type = item.mimeType ?: "*/*"
+                putExtra(Intent.EXTRA_STREAM, uri)
+                addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION)
+            }
+            startActivity(Intent.createChooser(intent, "分享"))
+        } catch (e: Exception) {
+            Toast.makeText(this, "无法分享", Toast.LENGTH_SHORT).show()
+        }
+    }
+
+    /** 属性（参照物 "Properties"） */
+    private fun showProperties(item: FileItem) {
+        val f = java.io.File(item.path)
+        val info = buildString {
+            append("名称：${item.name}\n")
+            append("路径：${item.path}\n")
+            append("类型：${if (item.isDirectory) "文件夹" else item.extension.ifEmpty { "文件" }}\n")
+            if (!item.isDirectory) append("大小：${FileFormat.size(item.size)}\n")
+            append("修改时间：${FileFormat.time(item)}\n")
+            append("可读：${if (f.canRead()) "是" else "否"}   可写：${if (f.canWrite()) "是" else "否"}\n")
+            if (item.isDirectory) {
+                val n = f.listFiles()?.size ?: 0
+                append("包含：$n 项")
+            }
+        }
+        MaterialAlertDialogBuilder(this)
+            .setTitle("属性")
+            .setMessage(info)
+            .setPositiveButton("确定", null)
+            .show()
+    }
+
+    private fun confirmDeleteOne(item: FileItem) {
+        MaterialAlertDialogBuilder(this)
+            .setTitle("删除")
+            .setMessage("确定删除「${item.name}」？")
+            .setNegativeButton("取消", null)
+            .setPositiveButton("删除") { _, _ -> viewModel.delete(item) }
+            .show()
+    }
+
+    private fun showRenameDialog(item: FileItem) {
+        val input = com.google.android.material.textfield.TextInputEditText(this).apply { setText(item.name) }
+        MaterialAlertDialogBuilder(this)
+            .setTitle("重命名")
+            .setView(input)
+            .setNegativeButton("取消", null)
+            .setPositiveButton("确定") { _, _ ->
+                val n = input.text?.toString()?.trim()
+                if (!n.isNullOrEmpty()) viewModel.rename(item, n)
+            }
+            .show()
+    }
+
+    private fun hintCopied(n: Int, mode: Clipboard.Mode) {
+        Toast.makeText(this, "已${mode.label} $n 项，去目标目录点「粘贴」", Toast.LENGTH_LONG).show()
+    }
+
     private fun enterSelection(item: FileItem) {
         selectionMode = true
         checked.clear()
@@ -313,12 +415,12 @@ class BrowseActivity : BaseActivity() {
         if (item.isDirectory) viewModel.enterDirectory(item) else openFile(item)
     }
 
-    private fun openFile(item: FileItem) {
+    private fun openFile(item: FileItem, mimeOverride: String? = null) {
         try {
             val file = File(item.path)
             val uri: Uri = FileProvider.getUriForFile(this, "${packageName}.fileprovider", file)
             val intent = Intent(Intent.ACTION_VIEW).apply {
-                setDataAndType(uri, item.mimeType ?: "*/*")
+                setDataAndType(uri, mimeOverride ?: item.mimeType ?: "*/*")
                 addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION)
             }
             startActivity(Intent.createChooser(intent, "打开方式"))
