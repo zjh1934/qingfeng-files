@@ -110,6 +110,10 @@
             style="@style/QfActionButton"
             android:text="剪切" />
         <TextView
+            android:id="@+id/btnActionZip"
+            style="@style/QfActionButton"
+            android:text="压缩" />
+        <TextView
             android:id="@+id/btnActionDelete"
             style="@style/QfActionButton"
             android:text="删除" />
