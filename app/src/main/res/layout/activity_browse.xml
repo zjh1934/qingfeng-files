@@ -226,9 +226,14 @@
         android:paddingEnd="6dp">
 
         <TextView
+            android:id="@+id/btnTrash"
+            style="@style/QfBarButton"
+            android:text="回收站" />
+
+        <TextView
             android:id="@+id/btnNew"
             style="@style/QfBarButton"
-            android:text="新建文件夹" />
+            android:text="新建" />
 
         <View
             android:layout_width="0dp"
