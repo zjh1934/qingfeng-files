@@ -13,6 +13,7 @@ import com.qingfeng.files.data.FilePrefs
 import com.qingfeng.files.data.FileSource
 import com.qingfeng.files.data.Filter
 import com.qingfeng.files.data.ProgressCallback
+import com.qingfeng.files.data.RecycleBin
 import com.qingfeng.files.data.FileSources
 import com.qingfeng.files.data.SearchScope
 import com.qingfeng.files.data.SortState
@@ -30,6 +31,7 @@ import kotlinx.coroutines.withContext
 class BrowseViewModel(app: Application) : AndroidViewModel(app) {
 
     private val source: FileSource = FileSources.local()
+    private val recycleBin = RecycleBin.from(getApplication())
     private val prefs = FilePrefs(app)
     private val pathStack = ArrayDeque<String>()
 
@@ -75,6 +77,9 @@ class BrowseViewModel(app: Application) : AndroidViewModel(app) {
     private val _hiddenOn = MutableLiveData<Boolean>(false)
     val hiddenOn: LiveData<Boolean> = _hiddenOn
 
+    private val _trashCount = MutableLiveData<Int>(0)
+    val trashCount: LiveData<Int> = _trashCount
+
     private val _searchScope = MutableLiveData<SearchScope>()
     val searchScope: LiveData<SearchScope> = _searchScope
 
@@ -89,6 +94,7 @@ class BrowseViewModel(app: Application) : AndroidViewModel(app) {
             val root = source.rootPath()
             pathStack.addLast(root)
             _viewMode.value = prefs.viewModeFor(root)
+            refreshTrashCount()
             open(root)
         }
     }
@@ -198,15 +204,53 @@ class BrowseViewModel(app: Application) : AndroidViewModel(app) {
     }
 
     // ---------- 单文件操作（长按菜单，保留） ----------
-    fun delete(item: FileItem) {
+    /**
+     * 删除：默认进回收站（参照物 `l5` 反向证明默认行为）。
+     * permanent=true 才真正抹掉。
+     */
+    fun delete(item: FileItem, permanent: Boolean = false) {
         viewModelScope.launch {
             try {
-                withContext(Dispatchers.IO) { source.delete(item) }
+                withContext(Dispatchers.IO) {
+                    if (permanent) source.delete(item) else recycleBin.moveToTrash(item)
+                }
+                refreshTrashCount()
                 open(pathStack.last())
             } catch (e: FileError) { _error.value = e.message }
             catch (e: Exception) { _error.value = e.message ?: "删除失败" }
         }
     }
+
+    fun deleteAllSelected(items: List<FileItem>, permanent: Boolean = false) {
+        viewModelScope.launch {
+            try {
+                withContext(Dispatchers.IO) {
+                    items.forEach {
+                        if (permanent) source.delete(it) else recycleBin.moveToTrash(it)
+                    }
+                }
+                refreshTrashCount()
+                open(pathStack.last())
+            } catch (e: FileError) { _error.value = e.message }
+            catch (e: Exception) { _error.value = e.message ?: "删除失败" }
+        }
+    }
+
+    // ---------- 回收站 ----------
+    fun refreshTrashCount() {
+        viewModelScope.launch {
+            val n = withContext(Dispatchers.IO) { recycleBin.count() }
+            _trashCount.value = n
+        }
+    }
+
+    fun trashEntries(): List<RecycleBin.Entry> = recycleBin.list()
+    fun restoreFromTrash(e: RecycleBin.Entry): Boolean =
+        recycleBin.restore(e).also { if (it) refreshTrashCount() }
+    fun deleteFromTrash(e: RecycleBin.Entry) =
+        recycleBin.deleteForever(e).also { refreshTrashCount() }
+    fun clearTrash() = recycleBin.clear().also { refreshTrashCount() }
+    fun trashSize(): Long = recycleBin.totalSize()
 
     fun rename(item: FileItem, newName: String) {
         viewModelScope.launch {
