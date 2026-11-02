@@ -19,15 +19,20 @@ data class Filter(
     val timeFrom: Long? = null,
     val timeTo: Long? = null,
     /** 是否显示隐藏文件（以 . 开头），默认不显示 */
-    val showHidden: Boolean = false
+    val showHidden: Boolean = false,
+    /** 文件名关键字（在当前列表内过滤；跨目录搜索走 FileSource.search） */
+    val keyword: String = ""
 ) {
     fun isEmpty(): Boolean =
         categories.isEmpty() && sizeFrom == null && sizeTo == null &&
-                timeFrom == null && timeTo == null && !showHidden
+                timeFrom == null && timeTo == null && !showHidden && keyword.isBlank()
 
     fun match(item: FileItem): Boolean {
         // 隐藏文件
         if (!showHidden && item.name.startsWith(".")) return false
+
+        // 关键字
+        if (keyword.isNotBlank() && !item.name.contains(keyword, ignoreCase = true)) return false
 
         // 目录不受类型/大小/时间筛选影响，始终保留
         if (item.isDirectory) return true
