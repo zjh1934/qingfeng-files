@@ -84,6 +84,10 @@ class BrowseActivity : BaseActivity() {
 
         swipe.setOnRefreshListener { viewModel.open(viewModel.currentPathValue()) }
         findViewById<View>(R.id.btnUp).setOnClickListener { if (!viewModel.goUp()) finish() }
+        findViewById<View>(R.id.btnTrash).setOnClickListener { openTrash() }
+        viewModel.trashCount.observe(this) { n ->
+            findViewById<TextView>(R.id.btnTrash).text = if (n > 0) "回收站($n)" else "回收站"
+        }
 
         findViewById<View>(R.id.btnSort).setOnClickListener { showSortDialog() }
         findViewById<View>(R.id.btnView).setOnClickListener { showViewDialog() }
@@ -168,38 +172,48 @@ class BrowseActivity : BaseActivity() {
     }
 
     // ---------- 排序面板 ----------
+    /**
+     * 排序面板。
+     * 借鉴点：参照物是 **PopupMenu**（`yw2.smali` 的 onDismiss(PopupMenu)），
+     * 不是 Dialog。挂在工具栏按钮下方弹出。
+     */
     private fun showSortDialog() {
+        val anchor = findViewById<View>(R.id.btnSort)
+        val popup = android.widget.PopupMenu(this, anchor)
         val cur = viewModel.currentSort()
-        val labels = SortField.values().map { f ->
+        SortField.values().forEachIndexed { i, f ->
             val mark = if (f == cur.field) (if (cur.dir == SortDir.ASC) " ↑" else " ↓") else ""
-            f.label + mark
-        }.toTypedArray() + arrayOf("切换升降序")
-        MaterialAlertDialogBuilder(this)
-            .setTitle("排序（当前：${cur.label()}）")
-            .setItems(labels) { _, which ->
-                if (which < SortField.values().size) {
-                    val f = SortField.values()[which]
-                    // 点已选中的字段 = 切方向（对应参照物的箭头）
-                    viewModel.applySort(
-                        if (f == cur.field) cur.toggled() else SortState(f, SortDir.ASC)
-                    )
-                } else {
-                    viewModel.applySort(cur.toggled())
-                }
+            popup.menu.add(0, i, 0, f.label + mark)
+        }
+        popup.menu.add(1, 99, 0, "切换升降序")
+        popup.setOnMenuItemClickListener { item ->
+            if (item.itemId == 99) {
+                viewModel.applySort(cur.toggled())
+            } else {
+                val f = SortField.values()[item.itemId]
+                // 点已选中的字段 = 切方向（对应参照物每个选项的方向箭头）
+                viewModel.applySort(if (f == cur.field) cur.toggled() else SortState(f, SortDir.ASC))
             }
-            .show()
+            true
+        }
+        popup.show()
     }
 
     // ---------- 视图面板 ----------
+    /** 视图面板，同样用 PopupMenu */
     private fun showViewDialog() {
-        val labels = ViewMode.values().map { it.label }.toTypedArray()
-        MaterialAlertDialogBuilder(this)
-            .setTitle("视图模式")
-            .setSingleChoiceItems(labels, ViewMode.values().indexOf(adapter.viewMode)) { d, which ->
-                viewModel.setViewMode(ViewMode.values()[which], applyAll = true)
-                d.dismiss()
-            }
-            .show()
+        val anchor = findViewById<View>(R.id.btnView)
+        val popup = android.widget.PopupMenu(this, anchor)
+        ViewMode.values().forEachIndexed { i, mode ->
+            val item = popup.menu.add(0, i, 0, mode.label)
+            item.isChecked = mode == adapter.viewMode
+        }
+        popup.menu.setGroupCheckable(0, true, true)
+        popup.setOnMenuItemClickListener {
+            viewModel.setViewMode(ViewMode.values()[it.itemId], applyAll = true)
+            true
+        }
+        popup.show()
     }
 
     // ---------- 筛选面板 ----------
@@ -324,13 +338,38 @@ class BrowseActivity : BaseActivity() {
             .show()
     }
 
+    /** 删除：默认进回收站，可勾选永久删除（参照物 `l5`） */
     private fun confirmDeleteOne(item: FileItem) {
+        var permanent = false
+        val msg = "「${item.name}」将被移到回收站，可在回收站中恢复。"
         MaterialAlertDialogBuilder(this)
             .setTitle("删除")
-            .setMessage("确定删除「${item.name}」？")
+            .setMessage(msg)
+            .setMultiChoiceItems(arrayOf("永久删除（不可恢复）"), booleanArrayOf(false)) { _, _, c -> permanent = c }
             .setNegativeButton("取消", null)
-            .setPositiveButton("删除") { _, _ -> viewModel.delete(item) }
+            .setPositiveButton("删除") { _, _ -> viewModel.delete(item, permanent) }
             .show()
+    }
+
+    /** 批量删除：同样默认进回收站 */
+    private fun confirmDeleteSelected() {
+        val items = adapter.currentList.filter { it.path in checked }
+        if (items.isEmpty()) return
+        var permanent = false
+        MaterialAlertDialogBuilder(this)
+            .setTitle("删除 ${items.size} 项")
+            .setMessage("这些内容将被移到回收站，可在回收站中恢复。")
+            .setMultiChoiceItems(arrayOf("永久删除（不可恢复）"), booleanArrayOf(false)) { _, _, c -> permanent = c }
+            .setNegativeButton("取消", null)
+            .setPositiveButton("删除") { _, _ ->
+                viewModel.deleteAllSelected(items, permanent)
+                exitSelection()
+            }
+            .show()
+    }
+
+    private fun openTrash() {
+        startActivity(Intent(this, TrashActivity::class.java))
     }
 
     private fun showRenameDialog(item: FileItem) {
@@ -392,20 +431,6 @@ class BrowseActivity : BaseActivity() {
     private fun updatePasteUi(cb: Clipboard?) {
         btnPaste.visibility = if (cb != null) View.VISIBLE else View.GONE
         if (cb != null) btnPaste.text = "粘贴 ${cb.items.size} 项"
-    }
-
-    private fun confirmDeleteSelected() {
-        val items = adapter.currentList.filter { it.path in checked }
-        if (items.isEmpty()) return
-        MaterialAlertDialogBuilder(this)
-            .setTitle("删除 ${items.size} 项")
-            .setMessage("确定删除选中的内容？")
-            .setNegativeButton("取消", null)
-            .setPositiveButton("删除") { _, _ ->
-                items.forEach { viewModel.delete(it) }
-                exitSelection()
-            }
-            .show()
     }
 
     // ---------- 打开 ----------
