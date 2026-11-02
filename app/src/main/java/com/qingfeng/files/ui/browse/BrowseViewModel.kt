@@ -12,6 +12,7 @@ import com.qingfeng.files.data.FileItem
 import com.qingfeng.files.data.FilePrefs
 import com.qingfeng.files.data.FileSource
 import com.qingfeng.files.data.Filter
+import com.qingfeng.files.data.ProgressCallback
 import com.qingfeng.files.data.LocalFileSource
 import com.qingfeng.files.data.SearchScope
 import com.qingfeng.files.data.SortState
@@ -28,7 +29,7 @@ import kotlinx.coroutines.withContext
  */
 class BrowseViewModel(app: Application) : AndroidViewModel(app) {
 
-    private val source: FileSource = LocalFileSource()
+    private val source: FileSource = FileSources.local()
     private val prefs = FilePrefs(app)
     private val pathStack = ArrayDeque<String>()
 
@@ -64,6 +65,12 @@ class BrowseViewModel(app: Application) : AndroidViewModel(app) {
     // ---------- 搜索 ----------
     private val _searchResults = MutableLiveData<List<FileItem>?>()
     val searchResults: LiveData<List<FileItem>?> = _searchResults
+
+    // ---------- 长任务进度（可取消） ----------
+    private val _progress = MutableLiveData<Pair<Long, Long>?>()
+    val progress: LiveData<Pair<Long, Long>?> = _progress
+    private val _cancel = MutableLiveData<Boolean>()
+    val cancel: LiveData<Boolean> = _cancel
 
     private val _searchScope = MutableLiveData<SearchScope>()
     val searchScope: LiveData<SearchScope> = _searchScope
@@ -153,22 +160,28 @@ class BrowseViewModel(app: Application) : AndroidViewModel(app) {
     fun pasteHere() {
         val cb = _clipboard.value ?: return
         viewModelScope.launch {
-            _loading.value = true
+            _progress.value = 0 to 1
             try {
                 val dir = currentPathValue()
-                withContext(Dispatchers.IO) {
-                    cb.items.forEach { item ->
-                        if (cb.mode == Clipboard.Mode.COPY) source.copy(item, dir)
-                        else source.move(item, dir)
+                val callback = object : ProgressCallback {
+                    override fun onProgress(done: Long, total: Long) {
+                        _progress.postValue(done to total.coerceAtLeast(1))
                     }
+                    override fun isCancelled() = _cancel.value == true
+                }
+                withContext(Dispatchers.IO) {
+                    if (cb.mode == Clipboard.Mode.COPY) source.copyAll(cb.items, dir, callback)
+                    else source.moveAll(cb.items, dir, callback)
                 }
                 _clipboard.value = null
+                _progress.value = null
                 open(dir)
-            } catch (e: FileError) { _error.value = e.message }
-            catch (e: Exception) { _error.value = e.message ?: "粘贴失败" }
-            finally { _loading.value = false }
+            } catch (e: FileError) { _error.value = e.message; _progress.value = null }
+            catch (e: Exception) { _error.value = e.message ?: "粘贴失败"; _progress.value = null }
         }
     }
+
+    fun cancelPaste() { _cancel.value = true }
 
     // ---------- 单文件操作（长按菜单，保留） ----------
     fun delete(item: FileItem) {
