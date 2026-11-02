@@ -55,15 +55,3 @@ interface FileSource {
 
     enum class Capability { CREATE_FILE, RENAME, DELETE, COPY, MOVE, STREAM, SEARCH }
 }
-
-/**
- * 文件源工厂（对应参照物的 `zr5.j(String)`）。
- *
- * 目前只有本地；将来加网盘时，按路径前缀分发即可，UI 一行不用改。
- */
-object FileSources {
-    private val local = LocalFileSource()
-
-    fun forPath(path: String): FileSource = local
-    fun local(): FileSource = local
-}
