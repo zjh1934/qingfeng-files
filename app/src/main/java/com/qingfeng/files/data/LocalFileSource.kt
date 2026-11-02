@@ -106,13 +106,22 @@ class LocalFileSource : FileSource {
         }
     }
 
-    override suspend fun search(base: String, keyword: String, limit: Int): List<FileItem> {
+    override suspend fun search(
+        base: String,
+        keyword: String,
+        scope: SearchScope,
+        limit: Int
+    ): List<FileItem> {
         val root = File(base)
         if (!root.exists()) throw FileError.NotFound(base)
         val kw = keyword.trim().lowercase()
         if (kw.isEmpty()) return emptyList()
+        val exts = scope.exts
         val out = ArrayList<FileItem>()
-        walk(root, out, limit) { f -> f.name.lowercase().contains(kw) }
+        walk(root, out, limit) { f ->
+            f.name.lowercase().contains(kw) &&
+                    (exts == null || f.extension.lowercase() in exts)
+        }
         return out
     }
 
