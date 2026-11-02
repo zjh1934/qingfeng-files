@@ -73,6 +73,7 @@ class BrowseActivity : BaseActivity() {
         adapter = FileAdapter(
             onItemClick = { onItemClick(it) },
             onItemLongClick = { showFileMenu(it) },
+            onMoreClick = { showFileMenu(it) },
             onCheckChange = { item, isChecked ->
                 if (isChecked) checked.add(item.path) else checked.remove(item.path)
                 refreshSelectionUi()
@@ -82,6 +83,7 @@ class BrowseActivity : BaseActivity() {
         recycler.adapter = adapter
 
         swipe.setOnRefreshListener { viewModel.open(viewModel.currentPathValue()) }
+        findViewById<View>(R.id.btnUp).setOnClickListener { if (!viewModel.goUp()) finish() }
 
         findViewById<View>(R.id.btnSort).setOnClickListener { showSortDialog() }
         findViewById<View>(R.id.btnView).setOnClickListener { showViewDialog() }
