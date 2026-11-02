@@ -145,6 +145,7 @@
         android:paddingStart="14dp"
         android:paddingEnd="14dp"
         android:paddingBottom="6dp">
+        <!-- 注意：容器也是 gone，代码里必须先显示容器再显示子控件 -->
 
         <ProgressBar
             android:id="@+id/progressBar"
