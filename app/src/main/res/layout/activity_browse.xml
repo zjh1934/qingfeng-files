@@ -35,6 +35,8 @@
             style="@style/QfBarButton" android:text="筛选" />
         <TextView android:id="@+id/btnNew"
             style="@style/QfBarButton" android:text="新建" />
+        <TextView android:id="@+id/btnHidden"
+            style="@style/QfBarButton" android:text="隐藏" />
         <View android:layout_width="0dp" android:layout_height="1dp" android:layout_weight="1" />
         <TextView android:id="@+id/btnPaste"
             style="@style/QfBarButton" android:text="粘贴" android:visibility="gone" />
@@ -116,7 +118,14 @@
             <androidx.recyclerview.widget.RecyclerView
                 android:id="@+id/recycler"
                 android:layout_width="match_parent"
-                android:layout_height="match_parent" />
+                android:layout_height="match_parent"
+                android:scrollbars="none" />
+
+            <com.qingfeng.files.ui.browse.FastScroller
+                android:id="@+id/fastScroller"
+                android:layout_width="24dp"
+                android:layout_height="match_parent"
+                android:layout_gravity="end" />
 
             <LinearLayout
                 android:layout_width="wrap_content"
